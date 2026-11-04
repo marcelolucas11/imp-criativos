@@ -23,12 +23,19 @@ struct ClientsView: View {
                         let p = ClientProfile.newProfile()
                         clients.save(p)
                         selected = p.id
+                        AppLog.info(.clientes, "Novo perfil de cliente criado.")
                     } label: { Image(systemName: "plus") }
                     .help("Novo cliente")
                     Button {
                         guard let url = Pickers.openFile(title: "Importar perfil de cliente", extensions: ["impcliente", "json"]) else { return }
-                        do { selected = try clients.importProfile(from: url).id }
-                        catch { message = "Arquivo inválido: \(error.localizedDescription)" }
+                        do {
+                            let p = try clients.importProfile(from: url)
+                            selected = p.id
+                            AppLog.info(.clientes, "Perfil \"\(p.name)\" importado.", details: url.lastPathComponent)
+                        } catch {
+                            message = "Arquivo inválido: \(error.localizedDescription)"
+                            AppLog.error(.clientes, "Falha ao importar perfil: \(error.localizedDescription)", details: url.path)
+                        }
                     } label: { Image(systemName: "square.and.arrow.down") }
                     .help("Importar perfil (.impcliente)")
                     Spacer()
@@ -166,7 +173,12 @@ struct ClientEditor: View {
                 Button(role: .destructive) { confirmDelete = true } label: { Label("Excluir", systemImage: "trash") }
                 Button {
                     guard let url = Pickers.saveFile(title: "Exportar perfil", name: "\(Paths.slug(draft.name)).impcliente") else { return }
-                    try? clients.export(draft, to: url)
+                    do {
+                        try clients.export(draft, to: url)
+                        AppLog.info(.clientes, "Perfil \"\(draft.name)\" exportado.", details: url.path)
+                    } catch {
+                        AppLog.error(.clientes, "Falha ao exportar perfil: \(error.localizedDescription)", details: url.path)
+                    }
                 } label: { Label("Exportar", systemImage: "square.and.arrow.up") }
                 .help("Gera um arquivo .impcliente para enviar ao seu sócio")
                 Spacer()
@@ -182,6 +194,7 @@ struct ClientEditor: View {
         .confirmationDialog("Excluir \(draft.name)?", isPresented: $confirmDelete) {
             Button("Excluir", role: .destructive) {
                 clients.delete(original)
+                AppLog.warning(.clientes, "Perfil \"\(original.name)\" excluído.")
                 onDeleted()
             }
         } message: { Text("Lotes já criados não são afetados.") }
@@ -191,6 +204,8 @@ struct ClientEditor: View {
         draft.removeItems = draft.removeItems.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { draft.name = "Sem nome" }
         clients.save(draft)
+        AppLog.info(.clientes, "Perfil \"\(draft.name)\" salvo.",
+                    details: "Remover (\(draft.removeItems.count)): \(draft.removeItems.joined(separator: ", "))\nEixos de variação: \(draft.axes.count)")
         withAnimation { savedFlash = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { savedFlash = false } }
     }

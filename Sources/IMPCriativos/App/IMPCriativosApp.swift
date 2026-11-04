@@ -14,6 +14,7 @@ struct IMPCriativosApp: App {
                 .environmentObject(model.jobs)
                 .environmentObject(model.runner)
                 .environmentObject(model.updater)
+                .environmentObject(model.log)
                 .preferredColorScheme(.dark)
                 .tint(Brand.red)
         }

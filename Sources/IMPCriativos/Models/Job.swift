@@ -83,6 +83,17 @@ struct Variation: Codable, Identifiable, Hashable {
     var review: ReviewStatus = .pending
     var redoNote: String?
     var attempts: Int = 0
+
+    // 1.0.0-beta.4 (opcionais para abrir lotes antigos)
+    var errorKind: AIErrorKind?
+    var errorDetails: String?
+    /// Aviso temporário enquanto espera nova tentativa ("Gemini ocupado · tentativa 2/6").
+    var retryNote: String?
+    var retryAt: Date?
+    /// IA que realmente gerou (difere da do lote quando houve troca automática).
+    var providerUsed: ProviderKind?
+    /// Forçar uma IA nesta variação (botão "Refazer com…").
+    var providerOverride: ProviderKind?
 }
 
 struct JobItem: Codable, Identifiable, Hashable {
@@ -101,6 +112,14 @@ struct JobItem: Codable, Identifiable, Hashable {
     var analysisDone = false
     var transcript: String?
 
+    // 1.0.0-beta.4 (opcionais para abrir lotes antigos)
+    var cleanErrorKind: AIErrorKind?
+    var cleanErrorDetails: String?
+    var cleanRetryNote: String?
+    var cleanRetryAt: Date?
+    var cleanProviderUsed: ProviderKind?
+    var cleanProviderOverride: ProviderKind?
+
     var variations: [Variation]
 
     var baseName: String { (sourceName as NSString).deletingPathExtension }
@@ -111,6 +130,10 @@ struct JobItem: Codable, Identifiable, Hashable {
 
     var hasFailure: Bool {
         cleanStatus == .failed || variations.contains { $0.status == .failed }
+    }
+
+    var failureCount: Int {
+        (cleanStatus == .failed ? 1 : 0) + (cleanStatus == .failed ? 0 : variations.filter { $0.status == .failed }.count)
     }
 
     var isFinished: Bool {
@@ -171,4 +194,6 @@ struct Job: Codable, Identifiable, Hashable {
     }
 
     var warningCount: Int { items.filter { $0.hasWarning }.count }
+
+    var failureCount: Int { items.reduce(0) { $0 + $1.failureCount } }
 }

@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainActor.assumeIsolated {
             Notifier.requestPermission()
+            AppLog.info(.sistema, "IMP Criativos \(AppInfo.version) aberto.",
+                        details: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
             model.runner.resumeInterrupted()
             if model.settings.checkUpdatesOnLaunch {
                 let beta = model.settings.includeBetaUpdates

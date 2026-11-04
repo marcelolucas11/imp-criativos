@@ -1,13 +1,98 @@
 import Foundation
 
+/// Tipo do erro: decide se vale tentar de novo, se cabe trocar de IA e o que mostrar na tela.
+enum AIErrorKind: String, Codable {
+    case temporary, rateLimit, network, blocked, auth, model, badRequest, other
+
+    /// Erros que costumam passar sozinhos: servidor ocupado, limite por minuto, internet.
+    var isTemporary: Bool { self == .temporary || self == .rateLimit || self == .network }
+
+    var title: String {
+        switch self {
+        case .temporary: return "IA sobrecarregada (temporário)"
+        case .rateLimit: return "Limite de uso atingido (temporário)"
+        case .network: return "Falha de conexão (temporário)"
+        case .blocked: return "Bloqueado pelo filtro de conteúdo da IA"
+        case .auth: return "Chave de API inválida ou sem permissão"
+        case .model: return "Modelo não encontrado"
+        case .badRequest: return "Pedido recusado pela IA"
+        case .other: return "Erro"
+        }
+    }
+
+    /// O que fazer a respeito.
+    var hint: String {
+        switch self {
+        case .temporary: return "O servidor da IA estava cheio. Tente de novo em alguns minutos ou refaça com a outra IA."
+        case .rateLimit: return "Sua conta atingiu o limite por minuto ou a cota. Espere um pouco, diminua os pedidos simultâneos ou confira o faturamento."
+        case .network: return "Confira a internet do Mac e tente de novo."
+        case .blocked: return "A IA recusou a imagem ou o pedido. Refaça com a outra IA ou deixe a instrução do cliente mais neutra."
+        case .auth: return "Confira a chave em Configurações → Chaves de API e use o botão Testar."
+        case .model: return "Confira o nome do modelo em Configurações → Modelos de IA (ou restaure os padrões)."
+        case .badRequest: return "Copie o erro no Histórico e cole na conversa com o Claude para investigar."
+        case .other: return "Copie o erro no Histórico e cole na conversa com o Claude para investigar."
+        }
+    }
+
+    static func classify(status: Int, message: String) -> AIErrorKind {
+        let m = message.lowercased()
+        let blockedWords = ["safety", "blocked", "moderation", "content policy", "prohibited", "content_filter", "violat", "responsible ai"]
+        switch status {
+        case 408, 500...599: return .temporary
+        case 429: return .rateLimit
+        case 401, 403: return .auth
+        case 404: return .model
+        case 400, 422:
+            if blockedWords.contains(where: { m.contains($0) }) { return .blocked }
+            if m.contains("api key") || m.contains("api_key") { return .auth }
+            return .badRequest
+        default: return .other
+        }
+    }
+}
+
 struct AIError: LocalizedError {
     let message: String
-    let retryable: Bool
-    init(_ message: String, retryable: Bool = false) {
+    let kind: AIErrorKind
+    let status: Int?
+    /// Dados técnicos para o histórico (modelo, endereço, código, trecho da resposta).
+    let details: String?
+
+    init(_ message: String, kind: AIErrorKind = .other, status: Int? = nil, details: String? = nil) {
         self.message = message
-        self.retryable = retryable
+        self.kind = kind
+        self.status = status
+        self.details = details
     }
+
+    var retryable: Bool { kind.isTemporary }
     var errorDescription: String? { message }
+}
+
+extension Error {
+    /// Tipo do erro (erros que não vieram da IA contam como "outro").
+    var aiKind: AIErrorKind { (self as? AIError)?.kind ?? .other }
+    var aiDetails: String? { (self as? AIError)?.details }
+}
+
+/// Contexto da chamada em andamento (qual lote, qual criativo, qual etapa).
+/// Vai junto com a tarefa assíncrona sem precisar passar parâmetro por todas as funções.
+struct RequestContext: Sendable {
+    var jobID: UUID?
+    var jobName: String?
+    var item: String?
+    var step: String = ""
+    var category: LogCategory = .ia
+    var maxAttempts: Int = 6
+    /// Avisa a tela: (texto, até quando) — nil limpa o aviso.
+    var onStatus: (@Sendable (String?, Date?) -> Void)?
+
+    @TaskLocal static var current: RequestContext? = nil
+
+    func log(_ level: LogLevel, _ message: String, details: String? = nil) {
+        let prefix = step.isEmpty ? "" : "\(step): "
+        ActivityLog.shared.add(level, category, prefix + message, details: details, jobID: jobID, jobName: jobName, item: item)
+    }
 }
 
 enum HTTP {
@@ -19,23 +104,73 @@ enum HTTP {
         return URLSession(configuration: c)
     }()
 
-    /// Envia a requisição com até 3 novas tentativas em erros temporários (429, 5xx, rede).
-    static func send(_ request: URLRequest, attempts: Int = 4) async throws -> Data {
-        var lastError: Error = AIError("Falha desconhecida")
-        for attempt in 0..<attempts {
-            if attempt > 0 {
-                let delay = [0, 3, 8, 20][min(attempt, 3)]
-                try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-            }
+    /// Espera antes da próxima tentativa: cresce a cada falha, com variação aleatória
+    /// (para vários pedidos não voltarem todos no mesmo segundo) e respeita o Retry-After do servidor.
+    static func backoff(attempt: Int, retryAfter: Double?) -> Double {
+        let base: [Double] = [2, 5, 10, 20, 40, 60]
+        let b = base[min(max(attempt - 1, 0), base.count - 1)]
+        var delay = b * Double.random(in: 0.8...1.3)
+        if let retryAfter, retryAfter > delay { delay = retryAfter }
+        return min(delay, 90)
+    }
+
+    /// Envia a requisição. Em erro temporário (429, 5xx, rede) tenta de novo com espera crescente.
+    /// - label: "Gemini · modelo", usado nos avisos e no histórico.
+    /// - gate: limita quantos pedidos vão ao mesmo tempo para a mesma IA e segura os outros quando ela está sobrecarregada.
+    /// - attempts: força um número de tentativas (senão usa o do contexto do lote, ou 4).
+    static func send(_ request: URLRequest, label: String = "", gate: ProviderGate? = nil, attempts: Int? = nil) async throws -> Data {
+        let ctx = RequestContext.current
+        let maxAttempts = max(1, attempts ?? ctx?.maxAttempts ?? 4)
+        let name = label.isEmpty ? (request.url?.host ?? "servidor") : label
+        let shortName = name.components(separatedBy: " · ").first ?? name
+        var lastError = AIError("Falha desconhecida")
+
+        for attempt in 1...maxAttempts {
+            var retryAfter: Double?
+            let started = Date()
             do {
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse else { throw AIError("Resposta inválida do servidor") }
-                if (200..<300).contains(http.statusCode) { return data }
-                let msg = apiErrorMessage(data) ?? "HTTP \(http.statusCode)"
-                let retry = http.statusCode == 429 || http.statusCode >= 500
-                let err = AIError("\(msg) (HTTP \(http.statusCode))", retryable: retry)
-                if !retry { throw err }
+                if let gate {
+                    try await gate.acquire { seconds, until in
+                        ctx?.onStatus?("\(shortName) ocupado — aguardando vez (\(seconds)s)", until)
+                    }
+                }
+                let result: (Data, URLResponse)
+                do {
+                    result = try await session.data(for: request)
+                    if let gate { await gate.release() }
+                } catch {
+                    if let gate { await gate.release() }
+                    throw error
+                }
+                let (data, response) = result
+                guard let http = response as? HTTPURLResponse else {
+                    throw AIError("Resposta inválida do servidor", kind: .network)
+                }
+                if (200..<300).contains(http.statusCode) {
+                    if attempt > 1 {
+                        ctx?.log(.success, "\(name) respondeu na tentativa \(attempt) de \(maxAttempts).")
+                        ctx?.onStatus?(nil, nil)
+                    }
+                    return data
+                }
+                let raw = apiErrorMessage(data) ?? "HTTP \(http.statusCode)"
+                let kind = AIErrorKind.classify(status: http.statusCode, message: raw)
+                if let ra = http.value(forHTTPHeaderField: "Retry-After"), let secs = Double(ra.trimmingCharacters(in: .whitespaces)) {
+                    retryAfter = secs
+                }
+                let secs = String(format: "%.1f", Date().timeIntervalSince(started))
+                let details = """
+                \(name) · \(request.httpMethod ?? "GET") \(request.url?.host ?? "")\(request.url?.path ?? "")
+                HTTP \(http.statusCode) · \(secs)s · tentativa \(attempt)/\(maxAttempts)
+                Resposta: \(String(decoding: data.prefix(700), as: UTF8.self))
+                """
+                let err = AIError("\(raw) (HTTP \(http.statusCode))", kind: kind, status: http.statusCode, details: details)
+                if !kind.isTemporary { throw err }
                 lastError = err
+                // servidor cheio: segura também os outros pedidos para esta IA
+                if let gate, kind == .temporary || kind == .rateLimit {
+                    await gate.pause(for: backoff(attempt: attempt, retryAfter: retryAfter) * 0.7)
+                }
             } catch let e as AIError {
                 if !e.retryable { throw e }
                 lastError = e
@@ -44,8 +179,24 @@ enum HTTP {
             } catch let e as URLError where e.code == .cancelled {
                 throw CancellationError()
             } catch {
-                lastError = AIError("Erro de conexão: \(error.localizedDescription)", retryable: true)
+                lastError = AIError("Erro de conexão: \(error.localizedDescription)", kind: .network,
+                                    details: "\(name) · \(request.url?.host ?? "") · tentativa \(attempt)/\(maxAttempts)\n\(error)")
             }
+
+            guard attempt < maxAttempts else { break }
+            let delay = backoff(attempt: attempt, retryAfter: retryAfter)
+            let code = lastError.status.map { " (\($0))" } ?? ""
+            ctx?.log(.warning,
+                     "\(name): \(lastError.kind.title)\(code). Tentativa \(attempt) de \(maxAttempts); nova tentativa em \(Int(delay.rounded()))s.",
+                     details: lastError.details)
+            ctx?.onStatus?("\(shortName) \(lastError.kind == .network ? "sem conexão" : "ocupado")\(code) · tentativa \(attempt + 1)/\(maxAttempts)",
+                           Date().addingTimeInterval(delay))
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+        ctx?.onStatus?(nil, nil)
+        if maxAttempts > 1 {
+            throw AIError("\(lastError.message) — desistiu após \(maxAttempts) tentativas", kind: lastError.kind,
+                          status: lastError.status, details: lastError.details)
         }
         throw lastError
     }
@@ -62,7 +213,10 @@ enum HTTP {
 
     static func json(_ data: Data) throws -> Any {
         do { return try JSONSerialization.jsonObject(with: data) }
-        catch { throw AIError("Resposta da IA não é um JSON válido") }
+        catch {
+            throw AIError("Resposta da IA não é um JSON válido", kind: .other,
+                          details: String(decoding: data.prefix(700), as: UTF8.self))
+        }
     }
 
     /// Remove o prefixo "data:image/png;base64," quando vier.

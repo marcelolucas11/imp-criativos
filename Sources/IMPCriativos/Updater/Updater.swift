@@ -74,7 +74,7 @@ final class Updater: ObservableObject {
             var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(AppInfo.updateRepo)/releases?per_page=20")!)
             req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             req.setValue("IMP-Criativos/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
-            let data = try await HTTP.send(req, attempts: 2)
+            let data = try await HTTP.send(req, label: "GitHub · releases", attempts: 2)
             guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                 throw AIError("Resposta inesperada do GitHub.")
             }
@@ -102,6 +102,7 @@ final class Updater: ObservableObject {
             lastChecked = Date()
             if let best {
                 state = .available(best.1)
+                AppLog.info(.atualizacao, "Versão \(best.1.version) disponível (instalada: \(AppInfo.version)).")
                 if silent {
                     Notifier.post(title: "Atualização disponível",
                                   body: "IMP Criativos \(best.1.version) está pronto para instalar.")
@@ -111,6 +112,7 @@ final class Updater: ObservableObject {
             }
         } catch {
             if !silent { state = .failed("Não foi possível buscar atualizações: \(error.localizedDescription)") }
+            AppLog.warning(.atualizacao, "Não foi possível buscar atualizações: \(error.localizedDescription)", details: error.aiDetails)
         }
     }
 
@@ -127,6 +129,7 @@ final class Updater: ObservableObject {
         }
 
         state = .downloading
+        AppLog.info(.atualizacao, "Baixando a versão \(release.version)…")
         do {
             let work = Paths.updates.appendingPathComponent(release.version, isDirectory: true)
             try? FileManager.default.removeItem(at: work)
@@ -140,7 +143,7 @@ final class Updater: ObservableObject {
 
             // 2. confere a integridade (SHA-256 publicado junto na Release)
             if let sumURL = release.checksumURL {
-                let sumData = try await HTTP.send(URLRequest(url: sumURL), attempts: 2)
+                let sumData = try await HTTP.send(URLRequest(url: sumURL), label: "GitHub · checksum", attempts: 2)
                 let expected = String(decoding: sumData, as: UTF8.self)
                     .split(whereSeparator: { $0 == " " || $0 == "\n" }).first.map(String.init)?.lowercased() ?? ""
                 let actual = SHA256.hash(data: try Data(contentsOf: zip)).map { String(format: "%02x", $0) }.joined()
@@ -191,10 +194,12 @@ final class Updater: ObservableObject {
             p.arguments = [script.path, "\(ProcessInfo.processInfo.processIdentifier)", appPath, newApp.path]
             try p.run()
 
+            AppLog.success(.atualizacao, "Versão \(release.version) instalada; reiniciando o app.")
             AppDelegate.skipQuitConfirmation = true
             NSApp.terminate(nil)
         } catch {
             state = .failed(error.localizedDescription)
+            AppLog.error(.atualizacao, "Falha ao instalar a versão \(release.version): \(error.localizedDescription)", details: error.aiDetails)
         }
     }
 

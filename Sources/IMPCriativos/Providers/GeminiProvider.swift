@@ -31,16 +31,20 @@ struct GeminiProvider: AIProvider {
 
         var data: Data
         do {
-            data = try await post(full)
-        } catch let e as AIError where e.message.contains("HTTP 400") && !e.message.lowercased().contains("api key") {
-            data = try await post(minimal)
+            data = try await post(full, model: imageModel, gate: .image(.gemini))
+        } catch let e as AIError where e.status == 400 && e.kind == .badRequest {
+            RequestContext.current?.log(.info, "Gemini recusou proporção/resolução; repetindo sem esses campos.", details: e.details)
+            data = try await post(minimal, model: imageModel, gate: .image(.gemini))
         }
         let obj = try HTTP.json(data)
         if let img = Self.findImage(in: obj) { return img }
         let text = Self.findText(in: obj)
+        let reason = Self.blockReason(in: obj)
         throw AIError(text.isEmpty
             ? "O Gemini não devolveu imagem (pode ter sido bloqueado pelo filtro de segurança)."
-            : "O Gemini não devolveu imagem: \(text.prefix(200))")
+            : "O Gemini não devolveu imagem: \(text.prefix(200))",
+            kind: .blocked,
+            details: "Gemini · \(imageModel)\(reason.map { " · motivo: \($0)" } ?? "")\nResposta: \(String(decoding: data.prefix(700), as: UTF8.self))")
     }
 
     func analyze(_ jpeg: Data, prompt: String) async throws -> String {
@@ -51,25 +55,41 @@ struct GeminiProvider: AIProvider {
                 ["type": "image", "mime_type": "image/jpeg", "data": jpeg.base64EncodedString()],
             ],
         ]
-        let obj = try HTTP.json(try await post(body))
+        let obj = try HTTP.json(try await post(body, model: textModel, gate: .text(.gemini)))
         let text = Self.findText(in: obj)
-        if text.isEmpty { throw AIError("O Gemini não devolveu a análise.") }
+        if text.isEmpty { throw AIError("O Gemini não devolveu a análise.", kind: .blocked) }
         return text
     }
 
     func testKey() async throws {
         var req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1")!)
         req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
-        _ = try await HTTP.send(req, attempts: 1)
+        _ = try await HTTP.send(req, label: "Gemini · teste da chave", attempts: 1)
     }
 
-    private func post(_ body: [String: Any]) async throws -> Data {
+    private func post(_ body: [String: Any], model: String, gate: ProviderGate) async throws -> Data {
         var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await HTTP.send(req)
+        return try await HTTP.send(req, label: "Gemini · \(model)", gate: gate)
+    }
+
+    /// Motivo de bloqueio quando o Gemini informa (finishReason / blockReason).
+    static func blockReason(in obj: Any) -> String? {
+        var found: String?
+        func walk(_ v: Any) {
+            if found != nil { return }
+            if let d = v as? [String: Any] {
+                for key in ["blockReason", "block_reason", "finishReason", "finish_reason", "status"] {
+                    if let s = d[key] as? String, !["STOP", "completed", "COMPLETED"].contains(s) { found = "\(key)=\(s)"; return }
+                }
+                d.values.forEach(walk)
+            } else if let a = v as? [Any] { a.forEach(walk) }
+        }
+        walk(obj)
+        return found
     }
 
     // MARK: leitura da resposta (tolerante a variações de formato)

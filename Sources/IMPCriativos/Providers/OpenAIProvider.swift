@@ -12,7 +12,8 @@ struct OpenAIProvider: AIProvider {
         let vertical = ["4:5", "9:16", "3:4", "2:3"].contains(aspectRatio)
         do {
             return try await edit(jpeg, prompt: prompt, size: vertical ? "1024x1536" : "auto")
-        } catch let e as AIError where vertical && e.message.contains("HTTP 400") && !e.message.lowercased().contains("api key") {
+        } catch let e as AIError where vertical && e.status == 400 && e.kind == .badRequest {
+            RequestContext.current?.log(.info, "OpenAI recusou o tamanho vertical; repetindo em tamanho automático.", details: e.details)
             return try await edit(jpeg, prompt: prompt, size: "auto")
         }
     }
@@ -31,15 +32,15 @@ struct OpenAIProvider: AIProvider {
         req.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
         req.httpBody = form.finish()
 
-        let obj = try HTTP.json(try await HTTP.send(req))
+        let obj = try HTTP.json(try await HTTP.send(req, label: "OpenAI · \(imageModel)", gate: .image(.openai)))
         guard let d = obj as? [String: Any], let first = (d["data"] as? [[String: Any]])?.first else {
-            throw AIError("A OpenAI não devolveu imagem.")
+            throw AIError("A OpenAI não devolveu imagem.", kind: .blocked)
         }
         if let b64 = first["b64_json"] as? String, let img = HTTP.decodeBase64(b64) { return img }
         if let urlString = first["url"] as? String, let url = URL(string: urlString) {
-            return try await HTTP.send(URLRequest(url: url))
+            return try await HTTP.send(URLRequest(url: url), label: "OpenAI · download da imagem")
         }
-        throw AIError("A OpenAI não devolveu imagem.")
+        throw AIError("A OpenAI não devolveu imagem.", kind: .blocked)
     }
 
     func analyze(_ jpeg: Data, prompt: String) async throws -> String {
@@ -60,12 +61,12 @@ struct OpenAIProvider: AIProvider {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let obj = try HTTP.json(try await HTTP.send(req))
+        let obj = try HTTP.json(try await HTTP.send(req, label: "OpenAI · \(textModel)", gate: .text(.openai)))
         guard let d = obj as? [String: Any],
               let choice = (d["choices"] as? [[String: Any]])?.first,
               let msg = choice["message"] as? [String: Any],
               let text = msg["content"] as? String, !text.isEmpty else {
-            throw AIError("A OpenAI não devolveu a análise.")
+            throw AIError("A OpenAI não devolveu a análise.", kind: .blocked)
         }
         return text
     }
@@ -73,6 +74,6 @@ struct OpenAIProvider: AIProvider {
     func testKey() async throws {
         var req = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        _ = try await HTTP.send(req, attempts: 1)
+        _ = try await HTTP.send(req, label: "OpenAI · teste da chave", attempts: 1)
     }
 }

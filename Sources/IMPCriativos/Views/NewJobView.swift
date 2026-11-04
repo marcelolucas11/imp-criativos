@@ -168,6 +168,9 @@ struct NewJobView: View {
                                          variations: variations, cleanProvider: cleanProvider,
                                          variationProvider: variationProvider, analysisProvider: analysisProvider,
                                          sizeMode: metaFormat.sizeMode, format: format, verifyText: verifyText)
+            AppLog.info(.lote, "Lote criado: \(files.count) criativos de \(folder.lastPathComponent).",
+                        details: "Cliente: \(client.name) · \(variations) variações · \(metaFormat.label) \(format.label) · checagem de texto: \(verifyText ? "sim" : "não")",
+                        jobID: job.id, jobName: job.name)
             settings.defaultCleanProvider = cleanProvider
             settings.defaultVariationProvider = variationProvider
             settings.defaultAnalysisProvider = analysisProvider
@@ -180,6 +183,7 @@ struct NewJobView: View {
             name = ""
         } catch {
             self.error = "Não foi possível criar o lote: \(error.localizedDescription)"
+            AppLog.error(.lote, "Não foi possível criar o lote: \(error.localizedDescription)", details: folder.path)
         }
     }
 }

@@ -6,6 +6,7 @@ enum SidebarItem: Hashable {
     case newJob
     case job(UUID)
     case clients
+    case logs
     case settings
 }
 
@@ -18,9 +19,12 @@ final class AppModel: ObservableObject {
     let clients = ClientStore()
     let jobs = JobStore()
     let updater = Updater()
+    let log = ActivityLog.shared
     lazy var runner = JobRunner(store: jobs, settings: settings)
 
     @Published var selection: SidebarItem? = .home
+    /// Lote a filtrar quando o Histórico é aberto a partir de um lote.
+    @Published var logJobFilter: UUID?
 
     private var bag = Set<AnyCancellable>()
 

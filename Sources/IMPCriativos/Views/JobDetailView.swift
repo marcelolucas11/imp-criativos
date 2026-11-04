@@ -51,6 +51,7 @@ struct JobDetailView: View {
             .confirmationDialog("Excluir este lote?", isPresented: $confirmDelete) {
                 Button("Excluir lote e imagens intermediárias", role: .destructive) {
                     runner.cancel(jobID)
+                    if let job = jobs.job(jobID) { AppLog.warning(.lote, "Lote excluído.", jobID: jobID, jobName: job.name) }
                     model.selection = .home
                     jobs.delete(jobID)
                 }
@@ -97,6 +98,8 @@ struct JobDetailView: View {
                 Text("\(job.finishedSteps)/\(job.totalSteps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
 
+            failureSummary(job)
+
             if let err = job.lastError {
                 HStack {
                     ErrorLabel(text: err)
@@ -114,8 +117,11 @@ struct JobDetailView: View {
                 default:
                     EmptyView()
                 }
-                if job.items.contains(where: { $0.hasFailure }) && job.state != .running {
-                    Button { runner.retryFailed(jobID) } label: { Label("Tentar falhas de novo", systemImage: "arrow.clockwise") }
+                if job.failureCount > 0 {
+                    Button { runner.retryFailed(jobID) } label: {
+                        Label("Tentar falhas de novo (\(job.failureCount))", systemImage: "arrow.clockwise")
+                    }
+                    .help("Volta para a fila tudo que falhou, usando a mesma IA (com troca automática se estiver ligada).")
                 }
 
                 Picker("", selection: $filter) {
@@ -129,7 +135,18 @@ struct JobDetailView: View {
                 Menu {
                     Button("Aprovar pendentes sem alerta") { bulkApprove(onlyClean: true) }
                     Button("Aprovar todos os pendentes") { bulkApprove(onlyClean: false) }
+                    if job.failureCount > 0 {
+                        Divider()
+                        ForEach(ProviderKind.allCases) { kind in
+                            Button("Refazer falhas com \(kind.label)") { runner.retryFailed(jobID, using: kind) }
+                                .disabled(!KeychainStore.hasKey(kind))
+                        }
+                    }
                     Divider()
+                    Button("Ver histórico deste lote") {
+                        model.logJobFilter = jobID
+                        model.selection = .logs
+                    }
                     Button("Abrir pasta dos originais") { AppInfo.open(URL(fileURLWithPath: job.inputFolder)) }
                     Button("Abrir pasta de trabalho do lote") { AppInfo.open(jobs.folder(for: jobID)) }
                     Divider()
@@ -156,18 +173,60 @@ struct JobDetailView: View {
         .background(Color(white: 0.09))
     }
 
+    @ViewBuilder
+    private func failureSummary(_ job: Job) -> some View {
+        let kinds: [AIErrorKind] = job.items.flatMap { item -> [AIErrorKind] in
+            if item.cleanStatus == .failed { return [item.cleanErrorKind ?? .other] }
+            return item.variations.filter { $0.status == .failed }.map { $0.errorKind ?? .other }
+        }
+        let temporary = kinds.filter { $0.isTemporary }.count
+        let definitive = kinds.count - temporary
+        let waiting = job.items.reduce(0) { acc, item in
+            acc + (item.cleanRetryNote != nil ? 1 : 0) + item.variations.filter { $0.retryNote != nil }.count
+        }
+        if temporary + definitive + waiting > 0 {
+            HStack(spacing: 14) {
+                if waiting > 0 {
+                    Label("\(waiting) aguardando nova tentativa", systemImage: "hourglass").foregroundStyle(Brand.warning)
+                }
+                if temporary > 0 {
+                    Label("\(temporary) falha(s) temporária(s) — IA ocupada ou sem conexão", systemImage: "clock.badge.exclamationmark")
+                        .foregroundStyle(Brand.warning)
+                }
+                if definitive > 0 {
+                    Label("\(definitive) falha(s) definitiva(s)", systemImage: "xmark.octagon.fill").foregroundStyle(Brand.red)
+                }
+                Button("Ver no histórico") {
+                    model.logJobFilter = jobID
+                    model.selection = .logs
+                }
+                .buttonStyle(.link)
+            }
+            .font(.caption)
+        }
+    }
+
     private func bulkApprove(onlyClean: Bool) {
+        var count = 0
+        defer {
+            if count > 0, let job = jobs.job(jobID) {
+                AppLog.info(.revisao, "\(count) imagem(ns) aprovada(s) em massa" + (onlyClean ? " (só as sem alerta)." : "."),
+                            jobID: jobID, jobName: job.name)
+            }
+        }
         jobs.update(jobID) { job in
             for i in job.items.indices {
                 if job.items[i].cleanStatus == .done, job.items[i].cleanReview == .pending,
                    !(onlyClean && job.items[i].cleanWarning != nil) {
                     job.items[i].cleanReview = .approved
+                    count += 1
                 }
                 for v in job.items[i].variations.indices {
                     let variation = job.items[i].variations[v]
                     if variation.status == .done, variation.review == .pending,
                        !(onlyClean && variation.textWarning != nil) {
                         job.items[i].variations[v].review = .approved
+                        count += 1
                     }
                 }
             }
@@ -188,9 +247,17 @@ struct JobDetailView: View {
             exportedFolder = result.folder
             exportMessage = "\(result.count) imagens salvas em \(result.folder.path)."
                 + (result.failures.isEmpty ? "" : "\nFalharam: \(result.failures.joined(separator: ", "))")
+            if result.failures.isEmpty {
+                AppLog.success(.exportacao, "\(result.count) imagens exportadas.", details: result.folder.path, jobID: jobID, jobName: job.name)
+            } else {
+                AppLog.warning(.exportacao, "\(result.count) imagens exportadas, \(result.failures.count) falharam.",
+                               details: "Pasta: \(result.folder.path)\nFalharam: \(result.failures.joined(separator: ", "))",
+                               jobID: jobID, jobName: job.name)
+            }
         } catch {
             exportedFolder = nil
             exportMessage = "Erro ao exportar: \(error.localizedDescription)"
+            AppLog.error(.exportacao, "Erro ao exportar: \(error.localizedDescription)", details: dest.path, jobID: jobID, jobName: job.name)
         }
     }
 }
@@ -228,12 +295,22 @@ struct ItemCard: View {
 
                         // LIMPO (v0)
                         Tile(title: "Limpo · v0", width: tileWidth, imageURL: item.cleanStatus == .done ? url(item.cleanedFile) : nil,
-                             status: item.cleanStatus, review: item.cleanReview) {
+                             status: item.cleanStatus, review: item.cleanReview,
+                             note: item.cleanRetryNote, noteUntil: item.cleanRetryAt) {
                             if let u = url(item.cleanedFile) {
                                 preview = PreviewItem(title: "\(item.sourceName) — limpo", url: u, compare: url(item.originalFile))
                             }
                         } footer: {
-                            if let e = item.cleanError { ErrorLabel(text: e) }
+                            if item.cleanStatus == .failed, let e = item.cleanError {
+                                FailureLabel(message: e, kind: item.cleanErrorKind)
+                                    .contextMenu { copyMenu(step: "Limpeza", message: e, kind: item.cleanErrorKind, details: item.cleanErrorDetails) }
+                                AltProviderButton(current: item.cleanProviderUsed ?? item.cleanProviderOverride ?? job.cleanProvider) { kind in
+                                    runner.redoClean(job.id, item.id, note: nil, using: kind)
+                                }
+                            }
+                            if item.cleanStatus == .done, let used = item.cleanProviderUsed, used != job.cleanProvider {
+                                ProviderUsedLabel(provider: used)
+                            }
                             if let w = item.cleanWarning { WarningLabel(text: w) }
                             if item.cleanStatus == .done || item.cleanStatus == .failed {
                                 ReviewBar(review: item.cleanReview, canApprove: item.cleanStatus == .done,
@@ -253,13 +330,23 @@ struct ItemCard: View {
                             ForEach(item.variations) { v in
                                 Tile(title: "v\(v.index) · \(v.axisName)", width: tileWidth,
                                      imageURL: v.status == .done ? url(v.file) : nil,
-                                     status: v.status, review: v.review) {
+                                     status: v.status, review: v.review,
+                                     note: v.retryNote, noteUntil: v.retryAt) {
                                     if let u = url(v.file) {
                                         preview = PreviewItem(title: "\(item.sourceName) — v\(v.index) (\(v.axisName))",
                                                               url: u, compare: url(item.cleanedFile))
                                     }
                                 } footer: {
-                                    if let e = v.error { ErrorLabel(text: e) }
+                                    if v.status == .failed, let e = v.error {
+                                        FailureLabel(message: e, kind: v.errorKind)
+                                            .contextMenu { copyMenu(step: "Variação v\(v.index) (\(v.axisName))", message: e, kind: v.errorKind, details: v.errorDetails) }
+                                        AltProviderButton(current: v.providerUsed ?? v.providerOverride ?? job.variationProvider) { kind in
+                                            runner.redoVariation(job.id, item.id, v.id, note: nil, using: kind)
+                                        }
+                                    }
+                                    if v.status == .done, let used = v.providerUsed, used != job.variationProvider {
+                                        ProviderUsedLabel(provider: used)
+                                    }
                                     if let w = v.textWarning { WarningLabel(text: w) }
                                     if v.status == .done || v.status == .failed {
                                         ReviewBar(review: v.review, canApprove: v.status == .done,
@@ -278,11 +365,40 @@ struct ItemCard: View {
     }
 
     private func setClean(_ r: ReviewStatus) {
-        jobs.updateItem(job.id, item.id) { $0.cleanReview = ($0.cleanReview == r ? .pending : r) }
+        let new: ReviewStatus = item.cleanReview == r ? .pending : r
+        jobs.updateItem(job.id, item.id) { $0.cleanReview = new }
+        AppLog.info(.revisao, "Limpeza (v0): \(Self.reviewText(new)).", jobID: job.id, jobName: job.name, item: item.sourceName)
     }
 
     private func setVariation(_ id: UUID, _ r: ReviewStatus) {
-        jobs.updateVariation(job.id, item.id, id) { $0.review = ($0.review == r ? .pending : r) }
+        guard let v = item.variations.first(where: { $0.id == id }) else { return }
+        let new: ReviewStatus = v.review == r ? .pending : r
+        jobs.updateVariation(job.id, item.id, id) { $0.review = new }
+        AppLog.info(.revisao, "Variação v\(v.index): \(Self.reviewText(new)).", jobID: job.id, jobName: job.name, item: item.sourceName)
+    }
+
+    static func reviewText(_ r: ReviewStatus) -> String {
+        switch r {
+        case .approved: return "aprovada"
+        case .discarded: return "descartada"
+        case .pending: return "voltou para pendente"
+        }
+    }
+
+    @ViewBuilder
+    private func copyMenu(step: String, message: String, kind: AIErrorKind?, details: String?) -> some View {
+        let k = kind ?? .other
+        Button("Copiar erro (para colar no Claude)") {
+            var text = """
+            IMP Criativos \(AppInfo.version) — erro no lote "\(job.name)"
+            Criativo: \(item.sourceName) · Etapa: \(step)
+            Tipo: \(k.title)
+            Mensagem: \(message)
+            """
+            if let details, !details.isEmpty { text += "\nDetalhes técnicos:\n\(details)" }
+            Clipboard.copy(text)
+        }
+        Button("Copiar só a mensagem") { Clipboard.copy(message) }
     }
 }
 
@@ -292,16 +408,21 @@ struct Tile<Footer: View>: View {
     let imageURL: URL?
     var status: StepStatus = .done
     var review: ReviewStatus = .pending
+    var note: String?
+    var noteUntil: Date?
     var onOpen: () -> Void
     @ViewBuilder var footer: Footer
 
     init(title: String, width: CGFloat, imageURL: URL?, status: StepStatus = .done, review: ReviewStatus = .pending,
+         note: String? = nil, noteUntil: Date? = nil,
          onOpen: @escaping () -> Void, @ViewBuilder footer: () -> Footer) {
         self.title = title
         self.width = width
         self.imageURL = imageURL
         self.status = status
         self.review = review
+        self.note = note
+        self.noteUntil = noteUntil
         self.onOpen = onOpen
         self.footer = footer()
     }
@@ -325,7 +446,12 @@ struct Tile<Footer: View>: View {
                     Rectangle().fill(Color.black.opacity(0.35))
                     switch status {
                     case .pending: Label("Na fila", systemImage: "clock").font(.caption).foregroundStyle(.secondary)
-                    case .running: VStack(spacing: 6) { ProgressView(); Text("Gerando…").font(.caption) }
+                    case .running:
+                        if let note {
+                            RetryNoteView(note: note, until: noteUntil)
+                        } else {
+                            VStack(spacing: 6) { ProgressView(); Text("Gerando…").font(.caption) }
+                        }
                     case .failed: Image(systemName: "xmark.octagon").font(.title).foregroundStyle(Brand.red)
                     case .done: EmptyView()
                     }
@@ -421,5 +547,32 @@ struct PreviewSheet: View {
         }
         .padding(18)
         .frame(minWidth: 760, idealWidth: 1100, minHeight: 620, idealHeight: 820)
+    }
+}
+
+/// "Refazer com GPT/Gemini" embaixo de uma etapa que falhou (só aparece se a outra IA tiver chave).
+struct AltProviderButton: View {
+    let current: ProviderKind
+    let redo: (ProviderKind) -> Void
+
+    private var alt: ProviderKind { current == .gemini ? .openai : .gemini }
+
+    var body: some View {
+        if KeychainStore.hasKey(alt) {
+            Button { redo(alt) } label: {
+                Label("Refazer com \(alt.label)", systemImage: "arrow.triangle.swap").font(.caption)
+            }
+            .buttonStyle(.link)
+        }
+    }
+}
+
+struct ProviderUsedLabel: View {
+    let provider: ProviderKind
+    var body: some View {
+        Label("feito com \(provider.label)", systemImage: "arrow.triangle.swap")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .help("A IA do lote falhou e esta imagem foi gerada pela outra (troca automática ou refazer com outra IA).")
     }
 }

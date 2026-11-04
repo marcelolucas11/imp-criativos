@@ -128,3 +128,52 @@ extension Date {
         return f.string(from: self)
     }
 }
+
+/// Erro de uma etapa: amarelo quando é temporário (IA ocupada, limite, conexão), vermelho quando é definitivo.
+struct FailureLabel: View {
+    let message: String
+    let kind: AIErrorKind?
+
+    var body: some View {
+        let k = kind ?? .other
+        let color = k.isTemporary ? Brand.warning : Brand.red
+        VStack(alignment: .leading, spacing: 2) {
+            Label(k == .other ? "Erro" : k.title,
+                  systemImage: k.isTemporary ? "clock.badge.exclamationmark" : "xmark.octagon.fill")
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+            Text(message).font(.caption2).lineLimit(2)
+        }
+        .foregroundStyle(color)
+        .help("\(k.title)\n\n\(message)\n\nO que fazer: \(k.hint)\n\nClique com o botão direito para copiar.")
+    }
+}
+
+/// Aviso enquanto a etapa espera para tentar de novo, com contagem regressiva.
+struct RetryNoteView: View {
+    let note: String
+    let until: Date?
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: "hourglass").font(.title3).foregroundStyle(Brand.warning)
+            Text(note).font(.caption2).multilineTextAlignment(.center).foregroundStyle(Brand.warning).lineLimit(3)
+            if let until {
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let s = max(0, Int(until.timeIntervalSince(timeline.date).rounded(.up)))
+                    Text(s > 0 ? "nova tentativa em \(s)s" : "tentando…")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(10)
+    }
+}
+
+enum Clipboard {
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}

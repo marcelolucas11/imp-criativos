@@ -76,6 +76,45 @@ struct SettingsView: View {
                     }
 
                     Section {
+                        Stepper(value: $settings.maxImageRequests, in: 1...6) {
+                            VStack(alignment: .leading) {
+                                Text("Pedidos de imagem ao mesmo tempo por IA: **\(settings.maxImageRequests)**")
+                                Text("Somando todos os lotes. Menos pedidos = menos erro de IA ocupada (503).")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Stepper(value: $settings.retryAttempts, in: 1...10) {
+                            VStack(alignment: .leading) {
+                                Text("Tentativas em erro temporário: **\(settings.retryAttempts)**")
+                                Text("Esperas crescentes: ~2s, 5s, 10s, 20s, 40s… (respeita o tempo pedido pelo servidor).")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Toggle(isOn: $settings.fallbackEnabled) {
+                            VStack(alignment: .leading) {
+                                Text("Trocar de IA automaticamente quando uma falhar")
+                                Text("Se o Gemini continuar ocupado, a imagem é refeita no GPT (e vice-versa). Precisa das duas chaves.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Toggle(isOn: $settings.fallbackOnBlocked) {
+                            VStack(alignment: .leading) {
+                                Text("Trocar também quando a imagem for bloqueada pelo filtro de conteúdo")
+                                Text("Útil quando uma IA recusa o criativo e a outra aceita.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(!settings.fallbackEnabled)
+                        if settings.fallbackEnabled && !(KeychainStore.hasKey(.gemini) && KeychainStore.hasKey(.openai)) {
+                            WarningLabel(text: "A troca automática só funciona com as chaves do Gemini e da OpenAI salvas.")
+                        }
+                    } header: {
+                        Text("Erros e tentativas")
+                    } footer: {
+                        Text("Cada tentativa, troca de IA e erro fica registrado em Histórico.")
+                    }
+
+                    Section {
                         LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         Picker("Formato do criativo", selection: $settings.defaultFormat) {
@@ -186,6 +225,7 @@ struct APIKeyRow: View {
                 if hasKey {
                     Button(role: .destructive) {
                         KeychainStore.delete(provider)
+                        AppLog.warning(.configuracoes, "Chave do \(provider.label) removida.")
                         refresh()
                         status = "Chave removida."
                         ok = false
@@ -216,11 +256,13 @@ struct APIKeyRow: View {
             try KeychainStore.save(value, for: provider)
             value = ""
             refresh()
+            AppLog.info(.configuracoes, "Chave do \(provider.label) salva no Keychain.")
             status = "Chave salva no Keychain."
             ok = true
         } catch {
             status = error.localizedDescription
             ok = false
+            AppLog.error(.configuracoes, "Falha ao salvar a chave do \(provider.label): \(error.localizedDescription)")
         }
     }
 
@@ -233,9 +275,12 @@ struct APIKeyRow: View {
             try await p.testKey()
             status = "Chave funcionando."
             ok = true
+            AppLog.success(.configuracoes, "Teste da chave do \(provider.label): funcionando.")
         } catch {
             status = "Falhou: \(error.localizedDescription)"
             ok = false
+            AppLog.error(.configuracoes, "Teste da chave do \(provider.label) falhou: \(error.localizedDescription)",
+                         details: [error.aiDetails, "Sugestão: \(error.aiKind.hint)"].compactMap { $0 }.joined(separator: "\n"))
         }
     }
 }

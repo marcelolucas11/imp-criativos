@@ -4,6 +4,7 @@ struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var jobs: JobStore
     @EnvironmentObject var updater: Updater
+    @EnvironmentObject var log: ActivityLog
 
     var body: some View {
         NavigationSplitView {
@@ -12,6 +13,10 @@ struct ContentView: View {
                     NavigationLink(value: SidebarItem.home) { Label("Início", systemImage: "house") }
                     NavigationLink(value: SidebarItem.newJob) { Label("Novo lote", systemImage: "plus.square.on.square") }
                     NavigationLink(value: SidebarItem.clients) { Label("Clientes", systemImage: "person.2") }
+                    NavigationLink(value: SidebarItem.logs) {
+                        Label("Histórico", systemImage: "list.bullet.rectangle")
+                            .badge(log.unseenErrors > 0 ? Text("\(log.unseenErrors)") : nil)
+                    }
                     NavigationLink(value: SidebarItem.settings) {
                         Label("Configurações", systemImage: "gearshape")
                             .badge(updater.available != nil ? Text("1") : nil)
@@ -38,6 +43,7 @@ struct ContentView: View {
                 case .newJob: NewJobView()
                 case let .job(id): JobDetailView(jobID: id)
                 case .clients: ClientsView()
+                case .logs: LogsView()
                 case .settings: SettingsView()
                 }
             }

@@ -39,6 +39,11 @@ struct MenuBarView: View {
         if !active.isEmpty {
             Button("Pausar todos os lotes") { runner.pauseAll() }
         }
+        let failures = jobs.jobs.filter { $0.state != .cancelled }.reduce(0) { $0 + $1.failureCount }
+        if failures > 0 {
+            Button("Tentar falhas de novo em todos os lotes (\(failures))") { runner.retryAllFailed() }
+        }
+        Button("Histórico…") { open(.logs) }
 
         Divider()
 
