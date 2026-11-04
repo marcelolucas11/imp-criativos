@@ -1,0 +1,39 @@
+name: Build (verificação)
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar XcodeGen
+        run: brew install xcodegen
+
+      - name: Gerar projeto Xcode
+        run: xcodegen generate
+
+      - name: Compilar
+        run: |
+          set -o pipefail
+          xcodebuild -project IMPCriativos.xcodeproj -scheme IMPCriativos -configuration Debug \
+            -derivedDataPath build ARCHS=arm64 CODE_SIGN_IDENTITY="-" build 2>&1 | tee build.log
+
+      - name: Erros de compilação como anotações
+        if: failure()
+        run: |
+          grep -E ': error: ' build.log | sed "s#$GITHUB_WORKSPACE/##" | sort -u | head -60 | \
+            sed -E 's#^(.*):([0-9]+):([0-9]+): error: (.*)$#::error file=\1,line=\2,col=\3::\4#' || true
+
+      - name: Guardar log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7

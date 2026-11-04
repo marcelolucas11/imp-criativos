@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>pt-BR</string>
+	<key>CFBundleDisplayName</key>
+	<string>IMP Criativos</string>
+	<key>CFBundleName</key>
+	<string>IMP Criativos</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.graphics-design</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Impera Services</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>IMPUpdateRepo</key>
+	<string>marcelolucas11/imp-criativos</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>O IMP Criativos lê os criativos que você escolher e salva os resultados aprovados.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>O IMP Criativos lê os criativos que você escolher e salva os resultados aprovados.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>O IMP Criativos lê os criativos que você escolher e salva os resultados aprovados.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>O IMP Criativos lê e salva criativos em discos externos, como o seu SSD.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>O IMP Criativos lê e salva criativos em pastas de rede.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.imperaservices.impcliente</string>
+			<key>UTTypeDescription</key>
+			<string>Perfil de cliente IMP Criativos</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>impcliente</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

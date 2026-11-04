@@ -1,0 +1,18 @@
+# Xcode (o projeto é gerado pelo XcodeGen a partir do project.yml)
+*.xcodeproj
+*.xcworkspace
+build/
+DerivedData/
+xcuserdata/
+dist/
+dmg/
+*.log
+
+# macOS
+.DS_Store
+
+# Segurança: nunca versionar chaves ou certificados
+*.p12
+*.pem
+*.key
+.env

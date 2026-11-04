@@ -1,0 +1,281 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @EnvironmentObject var settings: AppSettings
+    @EnvironmentObject var updater: Updater
+
+    @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var loginError: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                PageHeader(title: "Configurações")
+
+                Form {
+                    Section {
+                        APIKeyRow(provider: .gemini, help: "Crie em aistudio.google.com → Get API key")
+                        APIKeyRow(provider: .openai, help: "Crie em platform.openai.com → API keys")
+                    } header: {
+                        Text("Chaves de API")
+                    } footer: {
+                        Text("As chaves ficam no Keychain deste Mac. Nunca vão para o GitHub nem para outro lugar. Cada pessoa usa as próprias chaves.")
+                    }
+
+                    Section("Comportamento") {
+                        Toggle(isOn: $settings.runInBackground) {
+                            VStack(alignment: .leading) {
+                                Text("Continuar em segundo plano")
+                                Text("Ao fechar a janela, o lote continua e o app fica na barra de menus.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Toggle(isOn: $launchAtLogin) {
+                            VStack(alignment: .leading) {
+                                Text("Abrir ao ligar o Mac")
+                                Text("Aparece em Ajustes do Sistema → Geral → Itens de Início.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .onChange(of: launchAtLogin) { _, newValue in
+                            do {
+                                try LoginItem.set(newValue)
+                                loginError = LoginItem.needsApproval ? "Aprove o IMP Criativos em Ajustes do Sistema → Itens de Início." : nil
+                            } catch {
+                                loginError = error.localizedDescription
+                                launchAtLogin = LoginItem.isEnabled
+                            }
+                        }
+                        if let loginError {
+                            HStack {
+                                WarningLabel(text: loginError)
+                                Button("Abrir Itens de Início") { LoginItem.openSystemSettings() }
+                            }
+                        }
+                        Toggle("Avisar por notificação quando um lote terminar", isOn: $settings.notifyOnFinish)
+                    }
+
+                    Section("Processamento") {
+                        Stepper(value: $settings.maxConcurrent, in: 1...8) {
+                            Text("Criativos processados ao mesmo tempo: **\(settings.maxConcurrent)**")
+                        }
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("Pasta padrão de saída")
+                                Text(settings.defaultOutputFolder).font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
+                            }
+                            Spacer()
+                            Button("Alterar…") {
+                                if let url = Pickers.folder(title: "Pasta padrão de saída", start: settings.defaultOutputFolder) {
+                                    settings.defaultOutputFolder = url.path
+                                }
+                            }
+                        }
+                    }
+
+                    Section {
+                        LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).frame(width: 260) }
+                        LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).frame(width: 260) }
+                        Picker("Gemini — resolução", selection: $settings.geminiImageSize) {
+                            Text("1K").tag("1K"); Text("2K").tag("2K"); Text("4K").tag("4K")
+                        }
+                        LabeledContent("OpenAI — imagem") { TextField("", text: $settings.openaiImageModel).frame(width: 260) }
+                        LabeledContent("OpenAI — análise") { TextField("", text: $settings.openaiTextModel).frame(width: 260) }
+                        Picker("OpenAI — qualidade", selection: $settings.openaiQuality) {
+                            Text("Baixa").tag("low"); Text("Média").tag("medium"); Text("Alta").tag("high")
+                        }
+                        Button("Restaurar modelos padrão") { settings.resetModels() }
+                    } header: {
+                        Text("Modelos de IA")
+                    } footer: {
+                        Text("Quando o Google ou a OpenAI lançarem um modelo novo, troque o nome aqui sem esperar atualização do app.")
+                    }
+
+                    Section {
+                        LabeledContent("Gemini — por imagem (US$)") {
+                            TextField("", value: $settings.priceGeminiImage, format: .number.precision(.fractionLength(3))).frame(width: 90)
+                        }
+                        LabeledContent("OpenAI — por imagem (US$)") {
+                            TextField("", value: $settings.priceOpenAIImage, format: .number.precision(.fractionLength(3))).frame(width: 90)
+                        }
+                        LabeledContent("Checagem/análise (US$)") {
+                            TextField("", value: $settings.priceAnalysis, format: .number.precision(.fractionLength(4))).frame(width: 90)
+                        }
+                    } header: {
+                        Text("Tabela de preços (estimativa)")
+                    } footer: {
+                        Text("Usada só para estimar o custo antes do lote e somar o gasto. Ajuste conforme o preço atual do seu plano.")
+                    }
+
+                    Section("Atualizações") {
+                        LabeledContent("Versão instalada") { Text("\(AppInfo.version) (build \(AppInfo.build))").monospacedDigit() }
+                        Toggle("Receber versões beta", isOn: $settings.includeBetaUpdates)
+                        Toggle("Buscar atualização ao abrir o app", isOn: $settings.checkUpdatesOnLaunch)
+                        UpdateRow()
+                    }
+
+                    Section("Sobre") {
+                        LabeledContent("Repositório") {
+                            Link("github.com/\(AppInfo.updateRepo)", destination: URL(string: "https://github.com/\(AppInfo.updateRepo)")!)
+                        }
+                        LabeledContent("Dados locais") {
+                            Button("Abrir pasta") { AppInfo.open(Paths.appSupport) }
+                        }
+                    }
+                }
+                .formStyle(.grouped)
+                .scrollDisabled(true)
+            }
+            .padding(28)
+            .frame(maxWidth: 820, alignment: .leading)
+        }
+        .onAppear { launchAtLogin = LoginItem.isEnabled }
+    }
+}
+
+struct APIKeyRow: View {
+    let provider: ProviderKind
+    let help: String
+    @EnvironmentObject var settings: AppSettings
+
+    @State private var value = ""
+    @State private var hasKey = false
+    @State private var status: String?
+    @State private var ok = false
+    @State private var testing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(provider.label).frame(width: 110, alignment: .leading)
+                SecureField(hasKey ? "•••••••• (salva)" : "Cole a chave aqui", text: $value)
+                Button("Salvar") { save() }.disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
+                    Task { await test() }
+                } label: {
+                    if testing { ProgressView().controlSize(.small) } else { Text("Testar") }
+                }
+                .disabled(!hasKey || testing)
+                if hasKey {
+                    Button(role: .destructive) {
+                        KeychainStore.delete(provider)
+                        refresh()
+                        status = "Chave removida."
+                        ok = false
+                    } label: { Image(systemName: "trash") }
+                    .buttonStyle(.borderless)
+                    .help("Remover chave")
+                }
+            }
+            HStack(spacing: 6) {
+                if let status {
+                    Image(systemName: ok ? "checkmark.circle.fill" : "info.circle")
+                        .foregroundStyle(ok ? Brand.success : .secondary)
+                    Text(status)
+                } else {
+                    Text(help)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() { hasKey = KeychainStore.hasKey(provider) }
+
+    private func save() {
+        do {
+            try KeychainStore.save(value, for: provider)
+            value = ""
+            refresh()
+            status = "Chave salva no Keychain."
+            ok = true
+        } catch {
+            status = error.localizedDescription
+            ok = false
+        }
+    }
+
+    @MainActor
+    private func test() async {
+        testing = true
+        defer { testing = false }
+        do {
+            let p = try ProviderFactory.make(provider, config: ProviderConfig(settings))
+            try await p.testKey()
+            status = "Chave funcionando."
+            ok = true
+        } catch {
+            status = "Falhou: \(error.localizedDescription)"
+            ok = false
+        }
+    }
+}
+
+struct UpdateRow: View {
+    @EnvironmentObject var updater: Updater
+    @EnvironmentObject var settings: AppSettings
+    @EnvironmentObject var runner: JobRunner
+    @State private var confirmInstall = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Button {
+                    Task { await updater.check(includeBeta: settings.includeBetaUpdates) }
+                } label: { Label("Buscar atualização", systemImage: "arrow.triangle.2.circlepath") }
+                .disabled(updater.state == .checking || updater.state == .downloading || updater.state == .installing)
+
+                switch updater.state {
+                case .idle:
+                    if let d = updater.lastChecked { Text("Última verificação: \(d.short)").font(.caption).foregroundStyle(.secondary) }
+                case .checking:
+                    ProgressView().controlSize(.small); Text("Verificando…").foregroundStyle(.secondary)
+                case .upToDate:
+                    Label("Você está na versão mais recente.", systemImage: "checkmark.circle.fill").foregroundStyle(Brand.success)
+                case .available:
+                    EmptyView()
+                case .downloading:
+                    ProgressView().controlSize(.small); Text("Baixando…").foregroundStyle(.secondary)
+                case .installing:
+                    ProgressView().controlSize(.small); Text("Instalando… o app vai reiniciar.").foregroundStyle(.secondary)
+                case let .failed(msg):
+                    ErrorLabel(text: msg)
+                }
+            }
+
+            if let r = updater.available {
+                Card(padding: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Versão \(r.version) disponível").font(.headline)
+                            if r.prerelease { Text("beta").font(.caption).padding(.horizontal, 6).background(Brand.red.opacity(0.2), in: Capsule()) }
+                            Spacer()
+                            if let page = r.pageURL { Link("Ver no GitHub", destination: page).font(.caption) }
+                        }
+                        if !r.notes.isEmpty {
+                            ScrollView {
+                                Text(r.notes).font(.callout).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                            }
+                            .frame(maxHeight: 160)
+                        }
+                        Button {
+                            if runner.hasActiveWork { confirmInstall = true } else { Task { await updater.install(r) } }
+                        } label: { Label("Instalar e reiniciar", systemImage: "arrow.down.circle.fill") }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .confirmationDialog("Há um lote em andamento", isPresented: $confirmInstall) {
+                    Button("Pausar o lote e atualizar") {
+                        runner.pauseAll()
+                        Task { await updater.install(r) }
+                    }
+                } message: {
+                    Text("O lote é retomado de onde parou depois que o app reiniciar.")
+                }
+            }
+        }
+    }
+}
