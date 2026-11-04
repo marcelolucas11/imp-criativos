@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## [1.0.0-beta.4] — 2026-11-04
+
+**Erros de IA ocupada (HTTP 503) não derrubam mais o lote**
+
+- **Tentativas automáticas mais pacientes:** em erro temporário (503, 429, 5xx, falha de conexão) o app tenta de novo até 6 vezes, com esperas crescentes de ~2s, 5s, 10s, 20s e 40s, um pouco aleatórias para os pedidos não voltarem todos juntos. Respeita o tempo de espera pedido pelo servidor.
+- **Fila por IA:** no máximo 2 pedidos de imagem ao mesmo tempo para cada IA, somando todos os lotes. Quando a IA responde "ocupado", os outros pedidos para ela esperam alguns segundos em vez de insistir juntos.
+- **Troca automática de IA:** se o Gemini continuar ocupado depois das tentativas, a imagem é refeita no GPT (e vice-versa), quando as duas chaves estão salvas. Opcional também para imagens bloqueadas pelo filtro de conteúdo. A imagem mostra "feito com GPT (OpenAI)".
+- **Erro temporário × definitivo na tela:** enquanto espera, a etapa mostra em amarelo "Gemini ocupado (503) · tentativa 3/6" com contagem regressiva. Falha temporária aparece em amarelo; erros reais (chave inválida, modelo inexistente, bloqueio) em vermelho, com a sugestão do que fazer ao passar o mouse.
+- **Tentar falhas de novo:** o botão no topo do lote mostra quantas falhas existem e funciona mesmo com o lote rodando. Em Ações: "Refazer falhas com Gemini/GPT". Embaixo de cada etapa que falhou: "Refazer com …" usando a outra IA. Na barra de menus: tentar as falhas de todos os lotes.
+- Configurações → **Erros e tentativas**: pedidos simultâneos por IA, nº de tentativas e as duas opções de troca automática.
+
+**Novo: Histórico**
+
+- Nova tela **Histórico** na barra lateral com tudo o que acontece: lotes criados, iniciados, pausados e concluídos; cada limpeza e variação (com a IA usada e o tempo); tentativas e trocas de IA; aprovações, descartes e "refazer" com a observação; exportações; perfis de clientes; chaves salvas e testadas (nunca a chave em si); atualizações.
+- Filtros por tipo (tudo / erros e alertas / só erros), categoria, lote, período e busca por texto.
+- Detalhes técnicos de cada erro (modelo, código HTTP, resposta da IA) e a sugestão de solução.
+- **Copiar este registro**, **Copiar com contexto** e **Copiar diagnóstico** (versão, macOS, configuração sem chaves e registros filtrados), prontos para colar na conversa com o Claude.
+- Selo com o número de erros novos na barra lateral; "Ver histórico deste lote" no menu Ações; clique com o botão direito num erro para copiá-lo.
+- Os registros ficam só neste Mac (`Application Support/IMP Criativos/logs`), guardados por 6 meses. Exportar em .txt e apagar pelo menu Mais.
+
 ## [1.0.0-beta.3] — 2026-11-04
 
 - Tamanhos de saída agora são só os verticais padrão do Meta Ads: **Feed 4:5 — 1080×1350** e **Stories e Reels 9:16 — 1080×1920** (saíram quadrado, personalizado e manter original).

@@ -43,6 +43,7 @@ Pasta de criativos
 | Perfis de clientes | `~/Library/Application Support/IMP Criativos/clients/*.json` | Nunca |
 | Lotes | `…/jobs/<id>/job.json` + `originais/`, `limpos/`, `variacoes/` | Nunca |
 | Exportados | Pasta escolhida pelo usuário | Nunca |
+| Histórico (logs) | `…/logs/AAAA-MM.jsonl` (um arquivo por mês, guarda 6 meses) | Nunca |
 
 Cada passo do lote é salvo no `job.json` assim que termina. Se o app fechar no meio, o lote é retomado ao abrir;
 etapas interrompidas voltam para "pendente".
@@ -59,7 +60,26 @@ Os nomes dos modelos são editáveis nas Configurações. O tamanho de saída é
 `image_size` fixo em 2K (se o modelo recusar esses campos, repete sem eles); na OpenAI, `size` 1024x1536 (retrato, com
 nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho final (preenchendo e cortando o excesso pelo centro).
 
-Erros 429/5xx/rede são repetidos até 3 vezes com espera crescente.
+### Erros, tentativas e troca de IA
+
+- **Classificação** (`AIErrorKind` em `HTTP.swift`): temporário (408/5xx), limite (429), conexão, bloqueio de conteúdo,
+  chave, modelo inexistente (404), pedido recusado (400) e outros. Só os três primeiros são repetidos.
+- **Tentativas** (`HTTP.send`): padrão 6, com espera ~2s, 5s, 10s, 20s, 40s (±30% aleatório, máx. 90s) e respeito ao
+  `Retry-After`. Configurável em Configurações → Erros e tentativas.
+- **Fila por IA** (`ProviderGate`): limita pedidos simultâneos de imagem por provedor somando todos os lotes (padrão 2;
+  análise 4). Quando a IA responde 429/5xx, a fila daquela IA pausa por alguns segundos para os outros pedidos não
+  insistirem juntos.
+- **Troca automática** (`JobRunner.withFallback`): se a IA do lote falhar por erro temporário (ou bloqueio, se ligado) e a
+  outra tiver chave, a etapa é refeita nela. O item guarda `providerUsed` e a tela mostra "feito com …".
+- **Contexto da chamada** (`RequestContext`, task-local): leva lote, criativo e etapa até o `HTTP.send`, que avisa a tela
+  ("Gemini ocupado (503) · tentativa 3/6", com contagem regressiva) e registra no histórico.
+
+### Histórico
+
+`ActivityLog` grava cada movimentação (lote criado/iniciado/pausado/concluído, etapas, tentativas, trocas de IA, revisão,
+exportação, clientes, chaves, atualizações) em JSON Lines. A tela **Histórico** filtra por tipo, categoria, lote, período e
+texto, e copia o registro ou um diagnóstico (versão, macOS, configuração sem chaves e registros) para colar numa conversa
+de suporte.
 
 ## Segundo plano
 
