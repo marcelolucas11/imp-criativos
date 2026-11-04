@@ -8,10 +8,20 @@ struct OpenAIProvider: AIProvider {
     let quality: String
 
     func editImage(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
+        // Formatos verticais (4:5, 9:16) saem em retrato; a exportação ajusta para 1080×1350 ou 1080×1920.
+        let vertical = ["4:5", "9:16", "3:4", "2:3"].contains(aspectRatio)
+        do {
+            return try await edit(jpeg, prompt: prompt, size: vertical ? "1024x1536" : "auto")
+        } catch let e as AIError where vertical && e.message.contains("HTTP 400") && !e.message.lowercased().contains("api key") {
+            return try await edit(jpeg, prompt: prompt, size: "auto")
+        }
+    }
+
+    private func edit(_ jpeg: Data, prompt: String, size: String) async throws -> Data {
         var form = Multipart()
         form.field("model", imageModel)
         form.field("prompt", prompt)
-        form.field("size", "auto")
+        form.field("size", size)
         if !quality.isEmpty { form.field("quality", quality) }
         form.file("image", filename: "criativo.jpg", mime: "image/jpeg", data: jpeg)
 

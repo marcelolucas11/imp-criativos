@@ -14,7 +14,8 @@ protocol AIProvider {
 struct ProviderConfig {
     var geminiImageModel: String
     var geminiTextModel: String
-    var geminiImageSize: String
+    /// Resolução pedida ao Gemini. 2K cobre com folga 1080×1350 e 1080×1920.
+    var geminiImageSize = "2K"
     var openaiImageModel: String
     var openaiTextModel: String
     var openaiQuality: String
@@ -23,7 +24,6 @@ struct ProviderConfig {
     init(_ s: AppSettings) {
         geminiImageModel = s.geminiImageModel.trimmingCharacters(in: .whitespaces)
         geminiTextModel = s.geminiTextModel.trimmingCharacters(in: .whitespaces)
-        geminiImageSize = s.geminiImageSize
         openaiImageModel = s.openaiImageModel.trimmingCharacters(in: .whitespaces)
         openaiTextModel = s.openaiTextModel.trimmingCharacters(in: .whitespaces)
         openaiQuality = s.openaiQuality

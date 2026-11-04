@@ -37,6 +37,25 @@ enum OutputSizeMode: Codable, Hashable {
     }
 }
 
+/// Tamanhos padrão de criativo vertical do Meta Ads.
+enum MetaFormat: String, CaseIterable, Identifiable, Codable {
+    case feed, story
+    var id: String { rawValue }
+
+    var width: Int { 1080 }
+    var height: Int { self == .feed ? 1350 : 1920 }
+    var aspectRatio: String { self == .feed ? "4:5" : "9:16" }
+
+    var label: String {
+        switch self {
+        case .feed: return "Feed 4:5 — 1080×1350"
+        case .story: return "Stories e Reels 9:16 — 1080×1920"
+        }
+    }
+
+    var sizeMode: OutputSizeMode { .fixed(width: width, height: height) }
+}
+
 enum JobState: String, Codable {
     case queued, running, paused, review, exported, cancelled
 

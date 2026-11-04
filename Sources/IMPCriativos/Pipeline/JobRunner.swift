@@ -165,7 +165,7 @@ final class JobRunner: ObservableObject {
                 guard let upload = await Task.detached(operation: { ImageTools.uploadJPEG(src) }).value else {
                     throw AIError("Não foi possível ler a imagem original.")
                 }
-                let aspect = ImageTools.nearestAspectRatio(width: item.pixelWidth, height: item.pixelHeight)
+                let aspect = Self.aspect(job.sizeMode, width: item.pixelWidth, height: item.pixelHeight)
                 let prompt = Prompts.clean(removeItems: removeItems, extra: extra, redoNote: item.cleanRedoNote)
                 let result = try await providers[job.cleanProvider]!.editImage(upload, prompt: prompt, aspectRatio: aspect)
                 let rel = "limpos/\(Self.short(itemID))-\(Self.short(UUID())).png"
@@ -226,7 +226,7 @@ final class JobRunner: ObservableObject {
         guard let ready = store.job(jobID)?.items.first(where: { $0.id == itemID }) else { return }
         let reference = await Task.detached(operation: { ImageTools.uploadJPEG(cleanedURL) }).value
         guard let reference else { return }
-        let aspect = ImageTools.nearestAspectRatio(width: ready.pixelWidth, height: ready.pixelHeight)
+        let aspect = Self.aspect(job.sizeMode, width: ready.pixelWidth, height: ready.pixelHeight)
 
         for v in ready.variations where v.status == .pending || v.status == .running {
             if Task.isCancelled { return }
@@ -281,6 +281,15 @@ final class JobRunner: ObservableObject {
     }
 
     static func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }
+
+    /// Proporção pedida à IA: a do tamanho de saída (4:5 ou 9:16), para a imagem já nascer vertical.
+    /// Lotes antigos em "manter original" seguem a proporção de cada criativo.
+    static func aspect(_ mode: OutputSizeMode, width: Int, height: Int) -> String {
+        switch mode {
+        case let .fixed(w, h): return ImageTools.nearestAspectRatio(width: w, height: h)
+        case .original: return ImageTools.nearestAspectRatio(width: width, height: height)
+        }
+    }
 }
 
 /// Fila simples compartilhada entre os "trabalhadores" de um lote (tudo no MainActor).

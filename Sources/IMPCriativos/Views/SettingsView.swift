@@ -78,8 +78,8 @@ struct SettingsView: View {
                     Section {
                         LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        Picker("Gemini — resolução", selection: $settings.geminiImageSize) {
-                            Text("1K").tag("1K"); Text("2K").tag("2K"); Text("4K").tag("4K")
+                        Picker("Formato do criativo", selection: $settings.defaultFormat) {
+                            ForEach(MetaFormat.allCases) { Text($0.label).tag($0) }
                         }
                         LabeledContent("OpenAI — imagem") { TextField("", text: $settings.openaiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         LabeledContent("OpenAI — análise") { TextField("", text: $settings.openaiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }

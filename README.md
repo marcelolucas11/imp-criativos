@@ -16,7 +16,7 @@
 4. **Gera N variações** de cada um, cada uma num eixo diferente (fundo, composição, iluminação, ângulo…), mantendo o texto exato.
 5. **Confere o texto** de cada variação e marca divergências.
 6. **Fila de revisão**: aprovar, refazer (com observação) ou descartar.
-7. **Baixa os aprovados** no tamanho original de cada criativo ou num tamanho fixo (1080×1080, 1080×1350, 1080×1920 ou personalizado).
+7. **Baixa os aprovados** nos tamanhos verticais padrão do Meta Ads: 1080×1350 (feed 4:5) ou 1080×1920 (stories e reels 9:16).
 
 Exemplo: 50 criativos × 4 variações = **50 limpos + 200 variações**.
 

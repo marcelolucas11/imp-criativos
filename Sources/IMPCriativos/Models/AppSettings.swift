@@ -17,11 +17,11 @@ final class AppSettings: ObservableObject {
     @Published var defaultCleanProvider: ProviderKind { didSet { d.set(defaultCleanProvider.rawValue, forKey: "defaultCleanProvider") } }
     @Published var defaultVariationProvider: ProviderKind { didSet { d.set(defaultVariationProvider.rawValue, forKey: "defaultVariationProvider") } }
     @Published var defaultAnalysisProvider: ProviderKind { didSet { d.set(defaultAnalysisProvider.rawValue, forKey: "defaultAnalysisProvider") } }
+    @Published var defaultFormat: MetaFormat { didSet { d.set(defaultFormat.rawValue, forKey: "defaultFormat") } }
 
     // Modelos (editáveis: quando sair modelo novo, basta trocar o nome)
     @Published var geminiImageModel: String { didSet { d.set(geminiImageModel, forKey: "geminiImageModel") } }
     @Published var geminiTextModel: String { didSet { d.set(geminiTextModel, forKey: "geminiTextModel") } }
-    @Published var geminiImageSize: String { didSet { d.set(geminiImageSize, forKey: "geminiImageSize") } }
     @Published var openaiImageModel: String { didSet { d.set(openaiImageModel, forKey: "openaiImageModel") } }
     @Published var openaiTextModel: String { didSet { d.set(openaiTextModel, forKey: "openaiTextModel") } }
     @Published var openaiQuality: String { didSet { d.set(openaiQuality, forKey: "openaiQuality") } }
@@ -50,7 +50,7 @@ final class AppSettings: ObservableObject {
             "defaultAnalysisProvider": ProviderKind.gemini.rawValue,
             "geminiImageModel": Self.defaultModels.geminiImage,
             "geminiTextModel": Self.defaultModels.geminiText,
-            "geminiImageSize": "2K",
+            "defaultFormat": MetaFormat.feed.rawValue,
             "openaiImageModel": Self.defaultModels.openaiImage,
             "openaiTextModel": Self.defaultModels.openaiText,
             "openaiQuality": "medium",
@@ -70,9 +70,9 @@ final class AppSettings: ObservableObject {
         defaultCleanProvider = ProviderKind(rawValue: d.string(forKey: "defaultCleanProvider") ?? "") ?? .gemini
         defaultVariationProvider = ProviderKind(rawValue: d.string(forKey: "defaultVariationProvider") ?? "") ?? .gemini
         defaultAnalysisProvider = ProviderKind(rawValue: d.string(forKey: "defaultAnalysisProvider") ?? "") ?? .gemini
+        defaultFormat = MetaFormat(rawValue: d.string(forKey: "defaultFormat") ?? "") ?? .feed
         geminiImageModel = d.string(forKey: "geminiImageModel") ?? Self.defaultModels.geminiImage
         geminiTextModel = d.string(forKey: "geminiTextModel") ?? Self.defaultModels.geminiText
-        geminiImageSize = d.string(forKey: "geminiImageSize") ?? "2K"
         openaiImageModel = d.string(forKey: "openaiImageModel") ?? Self.defaultModels.openaiImage
         openaiTextModel = d.string(forKey: "openaiTextModel") ?? Self.defaultModels.openaiText
         openaiQuality = d.string(forKey: "openaiQuality") ?? "medium"
@@ -90,7 +90,6 @@ final class AppSettings: ObservableObject {
         geminiTextModel = Self.defaultModels.geminiText
         openaiImageModel = Self.defaultModels.openaiImage
         openaiTextModel = Self.defaultModels.openaiText
-        geminiImageSize = "2K"
         openaiQuality = "medium"
     }
 }

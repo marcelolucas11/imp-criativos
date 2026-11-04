@@ -7,20 +7,6 @@ struct NewJobView: View {
     @EnvironmentObject var jobs: JobStore
     @EnvironmentObject var runner: JobRunner
 
-    enum SizeChoice: String, CaseIterable, Identifiable {
-        case original, square, feed, story, custom
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .original: return "Manter original (mesmo tamanho de cada criativo)"
-            case .square: return "Forçar 1080×1080 (quadrado)"
-            case .feed: return "Forçar 1080×1350 (feed 4:5)"
-            case .story: return "Forçar 1080×1920 (stories 9:16)"
-            case .custom: return "Forçar tamanho personalizado"
-            }
-        }
-    }
-
     @State private var name = ""
     @State private var clientID: UUID?
     @State private var folder: URL?
@@ -29,25 +15,13 @@ struct NewJobView: View {
     @State private var cleanProvider: ProviderKind = .gemini
     @State private var variationProvider: ProviderKind = .gemini
     @State private var analysisProvider: ProviderKind = .gemini
-    @State private var sizeChoice: SizeChoice = .original
-    @State private var customW = 1080
-    @State private var customH = 1080
+    @State private var metaFormat: MetaFormat = .feed
     @State private var format: OutputFormat = .jpg
     @State private var verifyText = true
     @State private var error: String?
     @State private var didLoadDefaults = false
 
     private var client: ClientProfile? { clients.client(clientID) }
-
-    private var sizeMode: OutputSizeMode {
-        switch sizeChoice {
-        case .original: return .original
-        case .square: return .fixed(width: 1080, height: 1080)
-        case .feed: return .fixed(width: 1080, height: 1350)
-        case .story: return .fixed(width: 1080, height: 1920)
-        case .custom: return .fixed(width: max(64, customW), height: max(64, customH))
-        }
-    }
 
     private var missingKey: ProviderKind? {
         [cleanProvider, variationProvider, analysisProvider].first { !KeychainStore.hasKey($0) }
@@ -115,16 +89,8 @@ struct NewJobView: View {
                     }
 
                     Section("Saída") {
-                        Picker("Tamanho", selection: $sizeChoice) {
-                            ForEach(SizeChoice.allCases) { Text($0.label).tag($0) }
-                        }
-                        if sizeChoice == .custom {
-                            HStack {
-                                TextField("Largura", value: $customW, format: .number).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
-                                Text("×")
-                                TextField("Altura", value: $customH, format: .number).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
-                                Text("px").foregroundStyle(.secondary)
-                            }
+                        Picker("Tamanho", selection: $metaFormat) {
+                            ForEach(MetaFormat.allCases) { Text($0.label).tag($0) }
                         }
                         Picker("Formato", selection: $format) {
                             ForEach(OutputFormat.allCases) { Text($0.label).tag($0) }
@@ -180,6 +146,7 @@ struct NewJobView: View {
         cleanProvider = settings.defaultCleanProvider
         variationProvider = settings.defaultVariationProvider
         analysisProvider = settings.defaultAnalysisProvider
+        metaFormat = settings.defaultFormat
         if clientID == nil { clientID = clients.clients.first?.id }
         if let c = client { variations = max(1, c.defaultVariations) }
     }
@@ -200,10 +167,11 @@ struct NewJobView: View {
             let job = try jobs.createJob(name: jobName, client: client, inputFolder: folder, files: files,
                                          variations: variations, cleanProvider: cleanProvider,
                                          variationProvider: variationProvider, analysisProvider: analysisProvider,
-                                         sizeMode: sizeMode, format: format, verifyText: verifyText)
+                                         sizeMode: metaFormat.sizeMode, format: format, verifyText: verifyText)
             settings.defaultCleanProvider = cleanProvider
             settings.defaultVariationProvider = variationProvider
             settings.defaultAnalysisProvider = analysisProvider
+            settings.defaultFormat = metaFormat
             runner.start(job.id)
             model.selection = .job(job.id)
             // limpa o formulário para o próximo lote

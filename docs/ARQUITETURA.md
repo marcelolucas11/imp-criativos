@@ -54,9 +54,10 @@ etapas interrompidas voltam para "pendente".
 | Limpeza e variações | `gemini-nano-banana-2.1` via `POST /v1beta/interactions` | `gpt-image-2` via `POST /v1/images/edits` |
 | Análise e checagens | `gemini-3.5-flash-lite` via Interactions | `gpt-5-mini` via `POST /v1/chat/completions` |
 
-Os nomes dos modelos são editáveis nas Configurações. No Gemini, o app pede a proporção mais próxima do original
-(`aspect_ratio`) e a resolução (`image_size`); se o modelo recusar esses campos, repete sem eles. A exportação sempre
-ajusta para o tamanho final (preenchendo e cortando o excesso pelo centro).
+Os nomes dos modelos são editáveis nas Configurações. O tamanho de saída é sempre um formato vertical do Meta Ads
+(1080×1350 em 4:5 ou 1080×1920 em 9:16), e a IA já gera nessa proporção: no Gemini, `aspect_ratio` 4:5 ou 9:16 com
+`image_size` fixo em 2K (se o modelo recusar esses campos, repete sem eles); na OpenAI, `size` 1024x1536 (retrato, com
+nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho final (preenchendo e cortando o excesso pelo centro).
 
 Erros 429/5xx/rede são repetidos até 3 vezes com espera crescente.
 
