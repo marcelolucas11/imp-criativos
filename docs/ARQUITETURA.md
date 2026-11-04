@@ -8,13 +8,18 @@ O projeto Xcode é gerado pelo [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 ```
 Pasta de criativos
    ↓
-[1] LIMPEZA ─────── IA escolhida (Gemini ou GPT) remove tudo da lista do cliente
+[0] PLANEJAMENTO ── IA mais forte lê o pedido + o criativo: termos proibidos, texto final exato,
+                    instrução de limpeza específica e regras das variações
    ↓
-[2] ANÁLISE ─────── IA de visão confere sobras de marca e transcreve o texto
+[1] LIMPEZA ─────── IA de imagem segue o plano
    ↓
-[3] VARIAÇÕES ───── N variações, uma por eixo do cliente, mantendo o texto exato
+[2] ANÁLISE ─────── IA de visão + leitura do próprio Mac (Vision) conferem os termos proibidos;
+                    se sobrar algum, refaz a limpeza sozinha 1x. Texto travado = texto final do plano
    ↓
-[4] CHECAGEM ────── confere se o texto saiu igual e se a marca não voltou
+[3] VARIAÇÕES ───── N variações com o texto final travado; leitura do Mac confere cada uma e
+                    refaz sozinha 1x se aparecer termo proibido
+   ↓
+[4] CHECAGEM ────── IA confere se o texto saiu igual e se a marca não voltou
    ↓
 [5] REVISÃO ─────── aprovar / refazer (com observação) / descartar
    ↓

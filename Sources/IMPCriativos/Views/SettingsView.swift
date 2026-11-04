@@ -125,11 +125,14 @@ struct SettingsView: View {
                         Picker("OpenAI — qualidade", selection: $settings.openaiQuality) {
                             Text("Baixa").tag("low"); Text("Média").tag("medium"); Text("Alta").tag("high")
                         }
+                        Toggle("Planejar cada criativo com IA mais forte (recomendado)", isOn: $settings.planningEnabled)
+                        LabeledContent("Gemini — planejamento") { TextField("", text: $settings.geminiPlannerModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
+                        LabeledContent("OpenAI — planejamento") { TextField("", text: $settings.openaiPlannerModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         Button("Restaurar modelos padrão") { settings.resetModels() }
                     } header: {
                         Text("Modelos de IA")
                     } footer: {
-                        Text("Quando o Google ou a OpenAI lançarem um modelo novo, troque o nome aqui sem esperar atualização do app.")
+                        Text("O planejamento lê o seu pedido e cada criativo antes da limpeza e escreve as instruções exatas para as outras etapas. Usa a mesma IA escolhida para a análise no lote. Quando o Google ou a OpenAI lançarem um modelo novo, troque o nome aqui sem esperar atualização do app.")
                     }
 
                     Section {
@@ -141,6 +144,9 @@ struct SettingsView: View {
                         }
                         LabeledContent("Checagem/análise (US$)") {
                             TextField("", value: $settings.priceAnalysis, format: .number.precision(.fractionLength(4))).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
+                        }
+                        LabeledContent("Planejamento por criativo (US$)") {
+                            TextField("", value: $settings.pricePlanning, format: .number.precision(.fractionLength(3))).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                         }
                     } header: {
                         Text("Tabela de preços (estimativa)")

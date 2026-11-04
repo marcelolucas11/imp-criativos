@@ -133,7 +133,7 @@ struct NewJobView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Estimativa").font(.caption).foregroundStyle(.secondary)
                             Text(estimate.usd.usd).font(.system(size: 26, weight: .semibold, design: .rounded))
-                            Text("\(estimate.imageCalls) imagens geradas · \(estimate.analysisCalls) checagens")
+                            Text("\(estimate.imageCalls) imagens geradas · \(estimate.analysisCalls) checagens" + (settings.planningEnabled ? " · \(files.count) planejamentos" : ""))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()

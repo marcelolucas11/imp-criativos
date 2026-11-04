@@ -3,7 +3,53 @@ import Foundation
 /// Instruções enviadas às IAs. Em inglês porque os modelos seguem melhor,
 /// mas sempre exigindo que o texto em português seja mantido exatamente.
 enum Prompts {
-    static func clean(removeItems: [String], extra: String, textChanges: String = "", redoNote: String?) -> String {
+    /// Bloco com os termos que não podem aparecer de jeito nenhum.
+    static func forbiddenBlock(_ terms: [String], context: String) -> String {
+        guard !terms.isEmpty else { return "" }
+        let list = terms.map { "\"\($0)\"" }.joined(separator: ", ")
+        return """
+
+
+        FORBIDDEN TERMS — these must NOT appear anywhere in the \(context), in any size, font, language or capitalization, \
+        not even partially, blurred or inside phone screens, game thumbnails, signs or logos: \(list).
+        """
+    }
+
+    /// 1.0.0-beta.7: limpeza guiada pelo plano da IA de planejamento.
+    static func cleanFromPlan(_ plan: CreativePlan, extra: String, redoNote: String?) -> String {
+        var p = """
+        Edit this advertising image following these exact instructions:
+        \(plan.cleanInstruction)
+        """
+        if !plan.finalText.isEmpty {
+            p += """
+
+
+            After the edit, the image must contain exactly this text (Brazilian Portuguese), character by character, \
+            keeping the original typography, colors, effects and position of each line. Do not add any other text:
+            <<<
+            \(plan.finalText)
+            >>>
+            """
+        }
+        p += forbiddenBlock(plan.forbiddenTerms, context: "result")
+        p += """
+
+
+        Fill every erased area naturally so it blends with the surrounding background, as if those elements never existed. \
+        Keep everything that the instructions do not mention exactly as it is. Do not add any new logo, watermark, brand \
+        name, handle, phone number or website.
+        """
+        if !extra.trimmed.isEmpty {
+            p += "\n\nAdditional instructions from the user (Brazilian Portuguese): \(extra.trimmed)"
+        }
+        if let note = redoNote, !note.isEmpty {
+            p += "\n\nThe previous attempt was rejected. Fix this (Brazilian Portuguese): \(note)"
+        }
+        return p
+    }
+
+    static func clean(removeItems: [String], extra: String, textChanges: String = "", forbidden: [String] = [], redoNote: String?) -> String {
         let list = removeItems.map { "- \($0)" }.joined(separator: "\n")
         var p = """
         Edit this advertising image. Completely remove ALL of the following brand-identifying elements:
@@ -11,8 +57,11 @@ enum Prompts {
 
         Fill every removed area naturally so it blends with the surrounding background, as if those elements never existed.
         Do NOT change anything else: keep every other element, the main product/prize, people, colors, layout, composition \
-        and all other text exactly as they are. Do not add any new logo, watermark, brand name, handle, phone number or website.
+        and all other text exactly as they are (except the forbidden terms below, which must disappear even from headlines; \
+        rewrite the affected line minimally so it still reads naturally, without adding another brand). \
+        Do not add any new logo, watermark, brand name, handle, phone number or website.
         """
+        p += forbiddenBlock(forbidden, context: "result")
         if !extra.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             p += "\n\nAdditional instructions from the user (Brazilian Portuguese): \(extra)"
         }
@@ -32,8 +81,10 @@ enum Prompts {
         return p
     }
 
-    static func analysis(removeItems: [String], textChanges: String = "") -> String {
-        let list = removeItems.map { "- \($0)" }.joined(separator: "\n")
+    static func analysis(removeItems: [String], textChanges: String = "", forbidden: [String] = []) -> String {
+        var items = removeItems.map { "- \($0)" }
+        items += forbidden.map { "- the word/term \"\($0)\" written anywhere" }
+        let list = items.joined(separator: "\n")
         let changes = textChanges.trimmed
         if !changes.isEmpty {
             return """
@@ -66,7 +117,8 @@ enum Prompts {
         """
     }
 
-    static func variation(axis: VariationAxis, transcript: String?, extra: String, direction: String = "", textChanges: String = "", redoNote: String?) -> String {
+    static func variation(axis: VariationAxis, transcript: String?, extra: String, direction: String = "", textChanges: String = "",
+                          forbidden: [String] = [], rules: String = "", redoNote: String?) -> String {
         var p = """
         Create a NEW variation of this advertising creative for A/B testing.
         Direction for this variation: \(axis.instruction)
@@ -107,6 +159,10 @@ enum Prompts {
         } else {
             p += "\n\nThe reference has no text. Do not add any text."
         }
+        if !rules.trimmed.isEmpty {
+            p += "\n\nRules for every variation of this creative:\n\(rules.trimmed)"
+        }
+        p += forbiddenBlock(forbidden, context: "new image, even if they appear in the reference image")
         if !extra.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             p += "\n\nAdditional instructions from the user (Brazilian Portuguese): \(extra)"
         }
@@ -116,8 +172,10 @@ enum Prompts {
         return p
     }
 
-    static func textCheck(expected: String, removeItems: [String]) -> String {
-        let list = removeItems.map { "- \($0)" }.joined(separator: "\n")
+    static func textCheck(expected: String, removeItems: [String], forbidden: [String] = []) -> String {
+        var items = removeItems.map { "- \($0)" }
+        items += forbidden.map { "- the word/term \"\($0)\" written anywhere (headlines, screens, thumbnails, logos)" }
+        let list = items.joined(separator: "\n")
         return """
         Compare the text visible in this image with the EXPECTED text below. Ignore line breaks, position, style and \
         capitalization differences. Report spelling mistakes, missing words, extra words or wrong numbers.

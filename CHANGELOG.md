@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## [1.0.0-beta.7] — 2026-11-04
+
+**O app segue o seu pedido à risca**
+
+- **Nova etapa de planejamento antes da limpeza.** Uma IA de raciocínio mais forte (Gemini `gemini-4-argon` ou OpenAI `gpt-6-sol`, conforme a IA de análise do lote) olha cada criativo junto com o perfil do cliente e as instruções do lote, e escreve para as outras etapas:
+  - a lista de **termos proibidos** daquele criativo (palavras, nomes, @, sites), escritos como aparecem na imagem;
+  - o **texto final exato** que o criativo deve ter, reescrevendo a frase só o necessário quando uma palavra sai (ex.: "GOSTA DE AVIATOR?" → "GOSTA DE JOGAR?");
+  - uma **instrução de limpeza específica** para aquela imagem (o que apagar, onde, e qual linha troca por qual);
+  - as **regras das variações**.
+- **Corrigido:** as variações copiavam palavras que deviam sumir. Antes, o texto travado das variações vinha do que *sobrou* no limpo; se a limpeza deixasse "AVIATOR", as variações eram obrigadas a escrever "AVIATOR". Agora o texto travado é o texto final do plano, e o código remove qualquer termo proibido dele.
+- **Conferência pelo próprio Mac (sem custo):** a leitura de texto do macOS confere o limpo e cada variação. Se aparecer termo proibido, o app **refaz sozinho uma vez** com a observação do que apareceu. Se mesmo assim sobrar, o criativo chega com aviso amarelo "Termo proibido".
+- Os termos proibidos entram em todas as instruções (limpeza, variações e checagens), inclusive em telas de celular, miniaturas e logos.
+- A interpretação das instruções do lote também passou a usar o modelo de planejamento.
+- O plano de cada criativo aparece no ícone de prancheta ao lado do nome e fica no Histórico.
+- **Configurações → Modelos de IA:** liga/desliga o planejamento e troca os modelos. Se o modelo não for aceito, o app usa o de análise e avisa no Histórico. Custo estimado: cerca de US$ 0,02 por criativo (editável na tabela de preços).
+
 ## [1.0.0-beta.6] — 2026-11-04
 
 **Instruções por lote**

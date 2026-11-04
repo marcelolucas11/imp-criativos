@@ -21,6 +21,8 @@ struct ProviderConfig {
     var openaiImageModel: String
     var openaiTextModel: String
     var openaiQuality: String
+    var geminiPlannerModel: String = ""
+    var openaiPlannerModel: String = ""
 
     @MainActor
     init(_ s: AppSettings) {
@@ -29,10 +31,26 @@ struct ProviderConfig {
         openaiImageModel = s.openaiImageModel.trimmingCharacters(in: .whitespaces)
         openaiTextModel = s.openaiTextModel.trimmingCharacters(in: .whitespaces)
         openaiQuality = s.openaiQuality
+        geminiPlannerModel = s.geminiPlannerModel.trimmingCharacters(in: .whitespaces)
+        openaiPlannerModel = s.openaiPlannerModel.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Modelo de planejamento de cada IA (cai no de análise se estiver vazio).
+    func plannerModel(_ kind: ProviderKind) -> String {
+        let m = kind == .gemini ? geminiPlannerModel : openaiPlannerModel
+        return m.isEmpty ? (kind == .gemini ? geminiTextModel : openaiTextModel) : m
     }
 }
 
 enum ProviderFactory {
+    /// Mesma IA, mas com o modelo de planejamento (mais forte) no lugar do de análise.
+    static func makePlanner(_ kind: ProviderKind, config: ProviderConfig) throws -> AIProvider {
+        var c = config
+        if kind == .gemini { c.geminiTextModel = config.plannerModel(.gemini) }
+        else { c.openaiTextModel = config.plannerModel(.openai) }
+        return try make(kind, config: c)
+    }
+
     static func make(_ kind: ProviderKind, config: ProviderConfig) throws -> AIProvider {
         guard let key = KeychainStore.load(kind) else {
             throw AIError("Chave do \(kind.label) não configurada. Vá em Configurações → Chaves de API.")

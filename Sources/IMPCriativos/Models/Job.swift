@@ -94,6 +94,10 @@ struct Variation: Codable, Identifiable, Hashable {
     var providerUsed: ProviderKind?
     /// Forçar uma IA nesta variação (botão "Refazer com…").
     var providerOverride: ProviderKind?
+
+    // 1.0.0-beta.7
+    /// Quantas vezes o app refez sozinho porque apareceu termo proibido.
+    var autoRedos: Int?
 }
 
 struct JobItem: Codable, Identifiable, Hashable {
@@ -121,6 +125,14 @@ struct JobItem: Codable, Identifiable, Hashable {
     var cleanRetryAt: Date?
     var cleanProviderUsed: ProviderKind?
     var cleanProviderOverride: ProviderKind?
+
+    // 1.0.0-beta.7 (opcionais para abrir lotes antigos)
+    /// Plano feito pela IA de planejamento antes da limpeza.
+    var plan: CreativePlan?
+    /// O planejamento já rodou (com ou sem sucesso), para não repetir a cada retomada.
+    var planDone: Bool?
+    /// Quantas vezes o app refez a limpeza sozinho porque sobrou termo proibido.
+    var autoCleanRedos: Int?
 
     var variations: [Variation]
 

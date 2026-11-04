@@ -82,7 +82,8 @@ enum CostEstimator {
         let cleanCost = Double(items) * settings.imagePrice(for: clean)
         let varCost = Double(items * variations) * settings.imagePrice(for: variation)
         let analysis = items + (verifyText ? items * variations : 0)
-        let total = cleanCost + varCost + Double(analysis) * settings.priceAnalysis
+        let planning = settings.planningEnabled ? Double(items) * settings.pricePlanning : 0
+        let total = cleanCost + varCost + Double(analysis) * settings.priceAnalysis + planning
         return Estimate(imageCalls: items * (1 + variations), analysisCalls: analysis, usd: total)
     }
 }

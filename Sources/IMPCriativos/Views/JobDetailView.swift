@@ -291,6 +291,10 @@ struct ItemCard: View {
                     Text(item.sourceName).font(.headline).lineLimit(1)
                     Text("\(item.pixelWidth)×\(item.pixelHeight)").font(.caption).foregroundStyle(.secondary)
                     Spacer()
+                    if let plan = item.plan {
+                        Image(systemName: "list.bullet.clipboard").foregroundStyle(.secondary)
+                            .help(CreativePlanner.summary(plan))
+                    }
                     if let t = item.transcript, !t.isEmpty {
                         Image(systemName: "text.quote").foregroundStyle(.secondary)
                             .help(item.seenText.map { "Texto esperado nas variações:\n\(t)\n\nTexto visto no limpo:\n\($0)" }

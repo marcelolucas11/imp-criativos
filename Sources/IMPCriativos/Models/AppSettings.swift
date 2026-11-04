@@ -33,17 +33,25 @@ final class AppSettings: ObservableObject {
     @Published var openaiImageModel: String { didSet { d.set(openaiImageModel, forKey: "openaiImageModel") } }
     @Published var openaiTextModel: String { didSet { d.set(openaiTextModel, forKey: "openaiTextModel") } }
     @Published var openaiQuality: String { didSet { d.set(openaiQuality, forKey: "openaiQuality") } }
+    /// 1.0.0-beta.7: modelos mais fortes que leem o pedido e planejam cada criativo.
+    @Published var geminiPlannerModel: String { didSet { d.set(geminiPlannerModel, forKey: "geminiPlannerModel") } }
+    @Published var openaiPlannerModel: String { didSet { d.set(openaiPlannerModel, forKey: "openaiPlannerModel") } }
+    /// Liga a etapa de planejamento (recomendado).
+    @Published var planningEnabled: Bool { didSet { d.set(planningEnabled, forKey: "planningEnabled") } }
 
     // Preços estimados (US$) — só para a estimativa e o contador de gasto
     @Published var priceGeminiImage: Double { didSet { d.set(priceGeminiImage, forKey: "priceGeminiImage") } }
     @Published var priceOpenAIImage: Double { didSet { d.set(priceOpenAIImage, forKey: "priceOpenAIImage") } }
     @Published var priceAnalysis: Double { didSet { d.set(priceAnalysis, forKey: "priceAnalysis") } }
+    @Published var pricePlanning: Double { didSet { d.set(pricePlanning, forKey: "pricePlanning") } }
 
     static let defaultModels = (
         geminiImage: "gemini-nano-banana-2.1",
         geminiText: "gemini-3.5-flash-lite",
         openaiImage: "gpt-image-2",
-        openaiText: "gpt-5-mini"
+        openaiText: "gpt-5-mini",
+        geminiPlanner: "gemini-4-argon",
+        openaiPlanner: "gpt-6-sol"
     )
 
     init() {
@@ -69,6 +77,10 @@ final class AppSettings: ObservableObject {
             "priceGeminiImage": 0.07,
             "priceOpenAIImage": 0.06,
             "priceAnalysis": 0.002,
+            "geminiPlannerModel": Self.defaultModels.geminiPlanner,
+            "openaiPlannerModel": Self.defaultModels.openaiPlanner,
+            "planningEnabled": true,
+            "pricePlanning": 0.02,
         ])
         let defaultOut = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
             .appendingPathComponent("IMP Criativos").path
@@ -95,6 +107,10 @@ final class AppSettings: ObservableObject {
         priceGeminiImage = d.double(forKey: "priceGeminiImage")
         priceOpenAIImage = d.double(forKey: "priceOpenAIImage")
         priceAnalysis = d.double(forKey: "priceAnalysis")
+        geminiPlannerModel = d.string(forKey: "geminiPlannerModel") ?? Self.defaultModels.geminiPlanner
+        openaiPlannerModel = d.string(forKey: "openaiPlannerModel") ?? Self.defaultModels.openaiPlanner
+        planningEnabled = d.bool(forKey: "planningEnabled")
+        pricePlanning = d.double(forKey: "pricePlanning")
     }
 
     func imagePrice(for p: ProviderKind) -> Double {
@@ -105,6 +121,7 @@ final class AppSettings: ObservableObject {
     var summary: String {
         """
         Modelos: Gemini imagem \(geminiImageModel), análise \(geminiTextModel) · OpenAI imagem \(openaiImageModel) (qualidade \(openaiQuality)), análise \(openaiTextModel)
+        Planejamento: \(planningEnabled ? "ligado (Gemini \(geminiPlannerModel) · OpenAI \(openaiPlannerModel))" : "desligado")
         Processamento: \(maxConcurrent) criativos por lote ao mesmo tempo · \(maxImageRequests) pedidos de imagem por IA · \(retryAttempts) tentativas em erro temporário
         Troca automática de IA: \(fallbackEnabled ? "ligada" : "desligada")\(fallbackEnabled ? (fallbackOnBlocked ? " (também em bloqueio de conteúdo)" : " (só em erro temporário)") : "")
         """
@@ -116,5 +133,7 @@ final class AppSettings: ObservableObject {
         openaiImageModel = Self.defaultModels.openaiImage
         openaiTextModel = Self.defaultModels.openaiText
         openaiQuality = "medium"
+        geminiPlannerModel = Self.defaultModels.geminiPlanner
+        openaiPlannerModel = Self.defaultModels.openaiPlanner
     }
 }

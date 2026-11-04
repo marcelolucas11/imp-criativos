@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// Executa os lotes: limpeza → análise → variações → checagem de texto.
+/// Executa os lotes: planejamento → limpeza → análise → variações → checagem de texto.
 /// Cada passo é salvo em disco; pausar, fechar o app ou desligar o Mac não perde trabalho.
 @MainActor
 final class JobRunner: ObservableObject {
@@ -84,6 +84,7 @@ final class JobRunner: ObservableObject {
             item.cleanRedoNote = note
             item.cleanProviderOverride = provider ?? item.cleanProviderOverride
             item.analysisDone = false
+            item.autoCleanRedos = 0
         }
         if let job = store.job(jobID), let item = job.items.first(where: { $0.id == itemID }) {
             var msg = "Limpeza enviada para refazer"
@@ -104,6 +105,7 @@ final class JobRunner: ObservableObject {
             v.review = .pending
             v.redoNote = note
             v.providerOverride = provider ?? v.providerOverride
+            v.autoRedos = 0
         }
         if let job = store.job(jobID), let item = job.items.first(where: { $0.id == itemID }),
            let v = item.variations.first(where: { $0.id == varID }) {
@@ -166,9 +168,13 @@ final class JobRunner: ObservableObject {
 
         // provedores escolhidos no lote são obrigatórios; o outro entra como reserva se tiver chave
         var providers: [ProviderKind: AIProvider] = [:]
+        var planners: [ProviderKind: AIProvider] = [:]
         let required = Set([job.cleanProvider, job.variationProvider, job.analysisProvider])
         for kind in ProviderKind.allCases {
-            do { providers[kind] = try ProviderFactory.make(kind, config: config) }
+            do {
+                providers[kind] = try ProviderFactory.make(kind, config: config)
+                planners[kind] = try ProviderFactory.makePlanner(kind, config: config)
+            }
             catch {
                 guard required.contains(kind) else { continue }
                 store.update(jobID) { $0.state = .paused; $0.lastError = error.localizedDescription }
@@ -193,6 +199,7 @@ final class JobRunner: ObservableObject {
 
         let workers = max(1, settings.maxConcurrent)
         let available = providers
+        let availablePlanners = planners
         let rule = FallbackRule(enabled: settings.fallbackEnabled, onBlocked: settings.fallbackOnBlocked)
         let attempts = max(1, settings.retryAttempts)
 
@@ -207,7 +214,8 @@ final class JobRunner: ObservableObject {
                 for _ in 0..<min(workers, pending.count) {
                     group.addTask { @MainActor [weak self] in
                         while !Task.isCancelled, let id = queue.next() {
-                            await self?.process(jobID: jobID, itemID: id, providers: available, rule: rule, attempts: attempts)
+                            await self?.process(jobID: jobID, itemID: id, providers: available, planners: availablePlanners,
+                                                config: config, rule: rule, attempts: attempts)
                         }
                     }
                 }
@@ -262,14 +270,99 @@ final class JobRunner: ObservableObject {
                        maxAttempts: attempts, onStatus: onStatus)
     }
 
-    private func process(jobID: UUID, itemID: UUID, providers: [ProviderKind: AIProvider], rule: FallbackRule, attempts: Int) async {
-        guard let job = store.job(jobID), let item = job.items.first(where: { $0.id == itemID }) else { return }
+    /// Quantas vezes o app refaz sozinho quando aparece termo proibido (limpeza e cada variação).
+    static let autoRedoLimit = 1
+
+    /// Faz o plano com o modelo de planejamento; se o modelo não for aceito, usa o de análise;
+    /// se a IA falhar (e a troca automática estiver ligada), tenta a outra.
+    private func makePlan(_ jpeg: Data, prompt: String, primary: ProviderKind,
+                          planners: [ProviderKind: AIProvider], providers: [ProviderKind: AIProvider],
+                          config: ProviderConfig, rule: FallbackRule, ctx: RequestContext) async throws -> CreativePlan {
+        let order = [primary] + ProviderKind.allCases.filter { $0 != primary }
+        var lastError: Error = AIError("Nenhuma IA disponível para o planejamento.")
+        for kind in order {
+            if kind != primary && !rule.enabled { break }
+            guard let planner = planners[kind] else { continue }
+            if kind != primary {
+                ctx.log(.warning, "refazendo o planejamento com \(kind.label).", details: lastError.aiDetails ?? lastError.localizedDescription)
+            }
+            let model = config.plannerModel(kind)
+            do {
+                let raw = try await RequestContext.$current.withValue(ctx) { try await planner.analyze(jpeg, prompt: prompt) }
+                if let plan = CreativePlanner.parse(raw, model: model) { return plan }
+                lastError = AIError("O planejamento do \(kind.label) veio fora do formato esperado.", details: String(raw.prefix(600)))
+            } catch {
+                if error is CancellationError || Task.isCancelled { throw error }
+                lastError = error
+                guard error.aiKind == .model || error.aiKind == .badRequest, let basic = providers[kind] else { continue }
+                let basicModel = kind == .gemini ? config.geminiTextModel : config.openaiTextModel
+                ctx.log(.warning, "o modelo de planejamento \(model) não foi aceito; usando \(basicModel). Confira o nome em Configurações → Modelos de IA.",
+                        details: error.aiDetails)
+                do {
+                    let raw = try await RequestContext.$current.withValue(ctx) { try await basic.analyze(jpeg, prompt: prompt) }
+                    if let plan = CreativePlanner.parse(raw, model: basicModel) { return plan }
+                    lastError = AIError("O planejamento veio fora do formato esperado.", details: String(raw.prefix(600)))
+                } catch {
+                    if error is CancellationError || Task.isCancelled { throw error }
+                    lastError = error
+                }
+            }
+        }
+        throw lastError
+    }
+
+    private static func joinNotes(_ a: String?, _ b: String?) -> String? {
+        let parts = [a, b].compactMap { $0?.trimmed }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    private func process(jobID: UUID, itemID: UUID, providers: [ProviderKind: AIProvider], planners: [ProviderKind: AIProvider],
+                         config: ProviderConfig, rule: FallbackRule, attempts: Int) async {
+        guard let job = store.job(jobID), let first = job.items.first(where: { $0.id == itemID }) else { return }
         let folder = store.folder(for: jobID)
         let removeItems = job.effectiveRemoveItems
         let extra = job.client.extraInstructions
         let textChanges = job.instructions?.textChanges ?? ""
         let direction = job.instructions?.direction ?? ""
-        let name = item.sourceName
+        let name = first.sourceName
+
+        // 0. PLANEJAMENTO: a IA mais forte lê o pedido e o criativo e escreve as instruções exatas
+        if first.planDone != true && first.cleanStatus != .done {
+            if settings.planningEnabled {
+                store.updateItem(jobID, itemID) { $0.cleanStatus = .running; $0.cleanRetryNote = "Planejando o criativo…"; $0.cleanRetryAt = nil }
+                let ctx = context(job, first, step: "Planejamento", category: .analise, attempts: attempts, onStatus: nil)
+                let started = Date()
+                do {
+                    let src = folder.appendingPathComponent(first.originalFile)
+                    guard let upload = await Task.detached(operation: { ImageTools.uploadJPEG(src) }).value else {
+                        throw AIError("Não foi possível ler a imagem original.")
+                    }
+                    let prompt = CreativePlanner.prompt(removeItems: removeItems, extra: extra, instructions: job.instructions)
+                    let plan = try await makePlan(upload, prompt: prompt, primary: job.analysisProvider, planners: planners,
+                                                  providers: providers, config: config, rule: rule, ctx: ctx)
+                    store.update(jobID) { $0.costUSD += self.settings.pricePlanning }
+                    store.updateItem(jobID, itemID) { $0.plan = plan; $0.planDone = true; $0.cleanRetryNote = nil }
+                    ctx.log(.info, "plano pronto em \(Self.elapsed(started)) · termos proibidos: "
+                            + (plan.forbiddenTerms.isEmpty ? "nenhum" : plan.forbiddenTerms.joined(separator: ", ")),
+                            details: CreativePlanner.summary(plan))
+                } catch {
+                    if error is CancellationError || Task.isCancelled {
+                        store.updateItem(jobID, itemID) { $0.cleanStatus = .pending; $0.cleanRetryNote = nil }
+                        return
+                    }
+                    store.updateItem(jobID, itemID) { $0.planDone = true; $0.plan = nil; $0.cleanRetryNote = nil }
+                    ctx.log(.warning, "não foi possível planejar (o criativo segue com as instruções diretas). \(error.localizedDescription)",
+                            details: error.aiDetails)
+                }
+            } else {
+                store.updateItem(jobID, itemID) { $0.planDone = true }
+            }
+        }
+
+        guard let item = store.job(jobID)?.items.first(where: { $0.id == itemID }) else { return }
+        let plan = item.plan
+        // termos do plano + palavras citadas nos itens de remoção (rede de segurança se o plano esquecer algum)
+        let forbidden = ForbiddenTerms.dedup((plan?.forbiddenTerms ?? []) + ForbiddenTerms.fallback(from: removeItems))
 
         // 1. LIMPEZA
         if item.cleanStatus != .done {
@@ -290,7 +383,15 @@ final class JobRunner: ObservableObject {
                     throw AIError("Não foi possível ler a imagem original.")
                 }
                 let aspect = Self.aspect(job.sizeMode, width: item.pixelWidth, height: item.pixelHeight)
-                let prompt = Prompts.clean(removeItems: removeItems, extra: extra, textChanges: textChanges, redoNote: item.cleanRedoNote)
+                let prompt: String
+                if let plan {
+                    var p = plan
+                    p.forbiddenTerms = forbidden
+                    prompt = Prompts.cleanFromPlan(p, extra: extra, redoNote: item.cleanRedoNote)
+                } else {
+                    prompt = Prompts.clean(removeItems: removeItems, extra: extra, textChanges: textChanges,
+                                           forbidden: forbidden, redoNote: item.cleanRedoNote)
+                }
                 let primary = item.cleanProviderOverride ?? job.cleanProvider
                 let (result, used) = try await withFallback(primary, providers, rule: rule, ctx: ctx) {
                     try await $0.editImage(upload, prompt: prompt, aspectRatio: aspect)
@@ -330,17 +431,25 @@ final class JobRunner: ObservableObject {
             }
         }
 
-        // 2. ANÁLISE: checa sobras de marca e transcreve o texto
+        // 2. ANÁLISE: checa sobras (IA + leitura do próprio Mac) e define o texto travado das variações
         guard let cleaned = store.job(jobID)?.items.first(where: { $0.id == itemID }),
               let cleanedRel = cleaned.cleanedFile else { return }
         let cleanedURL = folder.appendingPathComponent(cleanedRel)
         if !cleaned.analysisDone {
             let ctx = context(job, cleaned, step: "Análise", category: .analise, attempts: attempts, onStatus: nil)
+            let ocr = await Task.detached(operation: { LocalOCR.text(at: cleanedURL) }).value ?? ""
+            var aiText = ""
+            var aiWarnings: [String] = []
+            var aiFinalText: String?
+            var changesMissing = false
+            var analysisFailed: String?
             do {
                 guard let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(cleanedURL) }).value else {
                     throw AIError("Não foi possível ler a imagem limpa.")
                 }
-                let prompt = Prompts.analysis(removeItems: removeItems, textChanges: textChanges)
+                // com plano, o texto final já está decidido; a análise só confere e transcreve
+                let changesForAI = plan == nil ? textChanges : ""
+                let prompt = Prompts.analysis(removeItems: removeItems, textChanges: changesForAI, forbidden: forbidden)
                 let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: ctx) {
                     try await $0.analyze(jpeg, prompt: prompt)
                 }
@@ -348,34 +457,62 @@ final class JobRunner: ObservableObject {
                 let obj = JSONExtract.object(from: raw) ?? [:]
                 let isClean = (obj["clean"] as? Bool) ?? true
                 let found = (obj["found"] as? [String]) ?? []
-                let text = (obj["text"] as? String) ?? ""
-                // Com alterações de texto no lote, o texto esperado das variações é o final (já alterado).
-                let finalText = ((obj["final_text"] as? String)?.trimmed).flatMap { $0.isEmpty ? nil : $0 }
-                let expected = textChanges.trimmed.isEmpty ? text : (finalText ?? text)
-                let changesMissing = !textChanges.trimmed.isEmpty && (obj["changes_applied"] as? Bool) == false
-                var warnings: [String] = []
-                if !isClean { warnings.append("Possível sobra de marca: " + (found.isEmpty ? "verifique" : found.joined(separator: ", "))) }
-                if changesMissing { warnings.append("Alteração de texto não aplicada no limpo (as variações vão aplicar): \(textChanges.trimmed)") }
-                let warning = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
-                store.updateItem(jobID, itemID) {
-                    $0.transcript = expected
-                    $0.seenText = expected == text ? nil : text
-                    $0.cleanWarning = warning
-                    $0.analysisDone = true
-                }
-                if let warning { ctx.log(.warning, warning) }
+                aiText = (obj["text"] as? String) ?? ""
+                aiFinalText = ((obj["final_text"] as? String)?.trimmed).flatMap { $0.isEmpty ? nil : $0 }
+                changesMissing = !changesForAI.trimmed.isEmpty && (obj["changes_applied"] as? Bool) == false
+                if !isClean { aiWarnings.append("Possível sobra de marca: " + (found.isEmpty ? "verifique" : found.joined(separator: ", "))) }
             } catch is CancellationError {
                 return
             } catch {
                 if Task.isCancelled { return }
-                // sem análise o lote continua; as variações só não terão o texto travado
-                store.updateItem(jobID, itemID) {
-                    $0.cleanWarning = "Não foi possível conferir a limpeza: \(error.localizedDescription)"
-                    $0.analysisDone = true
-                }
-                ctx.log(.warning, "não foi possível conferir a limpeza (o lote continua). \(error.localizedDescription)",
+                analysisFailed = error.localizedDescription
+                ctx.log(.warning, "a IA não conseguiu conferir a limpeza (segue com a leitura do Mac). \(error.localizedDescription)",
                         details: error.aiDetails)
             }
+
+            // Conferência por código: termo proibido lido pela IA ou pelo OCR do Mac → refaz sozinho uma vez
+            let leftovers = ForbiddenTerms.found(in: aiText + "\n" + ocr, terms: forbidden)
+            if !leftovers.isEmpty && (cleaned.autoCleanRedos ?? 0) < Self.autoRedoLimit {
+                let note = "Ainda aparece: \(leftovers.joined(separator: ", ")). Apague esses termos de TODA a imagem, inclusive do título, das telas e das miniaturas, reescrevendo a frase só o necessário."
+                store.updateItem(jobID, itemID) {
+                    $0.autoCleanRedos = ($0.autoCleanRedos ?? 0) + 1
+                    $0.cleanRedoNote = Self.joinNotes($0.cleanRedoNote, note)
+                    $0.cleanStatus = .pending
+                    $0.analysisDone = false
+                }
+                ctx.log(.warning, "termo proibido ainda aparece no limpo (\(leftovers.joined(separator: ", "))). Refazendo a limpeza automaticamente.",
+                        details: "Leitura da IA:\n\(aiText)\n\nLeitura do Mac:\n\(ocr)")
+                return
+            }
+
+            // texto travado das variações: o final do plano; sem plano, o que a análise viu (com as alterações pedidas)
+            var expected: String
+            if let final = plan?.finalText, !final.isEmpty {
+                expected = final
+            } else {
+                let seen = aiText.trimmed.isEmpty ? ocr : aiText
+                expected = textChanges.trimmed.isEmpty ? seen : (aiFinalText ?? seen)
+            }
+            if !ForbiddenTerms.found(in: expected, terms: forbidden).isEmpty {
+                expected = ForbiddenTerms.strip(forbidden, from: expected)
+            }
+
+            var warnings = aiWarnings
+            if !leftovers.isEmpty {
+                warnings.append("Termo proibido no limpo mesmo após refazer: \(leftovers.joined(separator: ", ")) (as variações foram instruídas a não escrever)")
+            }
+            if changesMissing { warnings.append("Alteração de texto não aplicada no limpo (as variações vão aplicar): \(textChanges.trimmed)") }
+            if let analysisFailed, leftovers.isEmpty { warnings.append("Não foi possível conferir a limpeza com a IA: \(analysisFailed)") }
+            let warning = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
+            let seenText: String? = aiText.trimmed.isEmpty ? nil : aiText
+            let finalExpected = expected
+            store.updateItem(jobID, itemID) {
+                $0.transcript = finalExpected.trimmed.isEmpty ? nil : finalExpected
+                $0.seenText = seenText == finalExpected ? nil : seenText
+                $0.cleanWarning = warning
+                $0.analysisDone = true
+            }
+            if let warning { ctx.log(.warning, warning) }
         }
 
         // 3. VARIAÇÕES
@@ -386,6 +523,7 @@ final class JobRunner: ObservableObject {
             return
         }
         let aspect = Self.aspect(job.sizeMode, width: ready.pixelWidth, height: ready.pixelHeight)
+        let rules = plan?.variationRules ?? ""
 
         for v in ready.variations where v.status == .pending || v.status == .running {
             if Task.isCancelled { return }
@@ -403,19 +541,43 @@ final class JobRunner: ObservableObject {
             }
             do {
                 let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
-                let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
-                                               textChanges: textChanges, redoNote: v.redoNote)
                 let primary = v.providerOverride ?? job.variationProvider
-                let (result, used) = try await withFallback(primary, providers, rule: rule, ctx: ctx) {
-                    try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
+                var autoNote: String?
+                var redosUsed = v.autoRedos ?? 0
+                var out = cleanedURL
+                var ocrLeftovers: [String] = []
+                var used = primary
+
+                while true {
+                    let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
+                                                   textChanges: textChanges, forbidden: forbidden, rules: rules,
+                                                   redoNote: Self.joinNotes(v.redoNote, autoNote))
+                    let (result, provider) = try await withFallback(primary, providers, rule: rule, ctx: ctx) {
+                        try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
+                    }
+                    used = provider
+                    let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
+                    Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
+                    out = folder.appendingPathComponent(rel)
+                    try ImageTools.saveGenerated(result, to: out)
+                    store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: provider) }
+                    store.updateVariation(jobID, itemID, varID) { $0.file = rel }
+
+                    // leitura do próprio Mac: termo proibido → refaz sozinho uma vez
+                    let target = out
+                    let ocr = await Task.detached(operation: { LocalOCR.text(at: target) }).value ?? ""
+                    ocrLeftovers = ForbiddenTerms.found(in: ocr, terms: forbidden)
+                    guard !ocrLeftovers.isEmpty, redosUsed < Self.autoRedoLimit, !Task.isCancelled else { break }
+                    redosUsed += 1
+                    let redos = redosUsed
+                    store.updateVariation(jobID, itemID, varID) { $0.autoRedos = redos }
+                    autoNote = "Apareceu: \(ocrLeftovers.joined(separator: ", ")). Não escreva esses termos em nenhum lugar da imagem."
+                    ctx.log(.warning, "termo proibido apareceu (\(ocrLeftovers.joined(separator: ", "))). Refazendo automaticamente.",
+                            details: "Leitura do Mac:\n\(ocr)")
+                    ctx.onStatus?("Refazendo: termo proibido apareceu…", nil)
                 }
-                let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
-                Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
-                let out = folder.appendingPathComponent(rel)
-                try ImageTools.saveGenerated(result, to: out)
-                store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: used) }
+
                 store.updateVariation(jobID, itemID, varID) {
-                    $0.file = rel
                     $0.status = .done
                     $0.error = nil
                     $0.errorKind = nil
@@ -427,14 +589,17 @@ final class JobRunner: ObservableObject {
                 ctx.log(.success, "gerada com \(used.label) em \(Self.elapsed(started)).")
 
                 // 4. CHECAGEM DO TEXTO
-                if job.verifyText, let expected = ready.transcript, !expected.isEmpty,
-                   let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(out) }).value {
+                var warnings: [String] = []
+                if !ocrLeftovers.isEmpty { warnings.append("Termo proibido: " + ocrLeftovers.joined(separator: ", ")) }
+                let finalOut = out
+                if job.verifyText, let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(finalOut) }).value,
+                   (ready.transcript?.isEmpty == false || !forbidden.isEmpty) {
                     var checkCtx = ctx
                     checkCtx.step = "Checagem de texto v\(v.index)"
                     checkCtx.category = .analise
                     checkCtx.onStatus = nil
                     do {
-                        let prompt = Prompts.textCheck(expected: expected, removeItems: removeItems)
+                        let prompt = Prompts.textCheck(expected: ready.transcript ?? "(no text)", removeItems: removeItems, forbidden: forbidden)
                         let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: checkCtx) {
                             try await $0.analyze(jpeg, prompt: prompt)
                         }
@@ -443,12 +608,8 @@ final class JobRunner: ObservableObject {
                         let match = (obj["match"] as? Bool) ?? true
                         let diff = (obj["differences"] as? String) ?? ""
                         let brand = (obj["brand_found"] as? [String]) ?? []
-                        var warnings: [String] = []
-                        if !match { warnings.append("Texto diferente: " + (diff.isEmpty ? "verifique" : diff)) }
+                        if !match && ready.transcript?.isEmpty == false { warnings.append("Texto diferente: " + (diff.isEmpty ? "verifique" : diff)) }
                         if !brand.isEmpty { warnings.append("Marca apareceu: " + brand.joined(separator: ", ")) }
-                        let joined = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
-                        store.updateVariation(jobID, itemID, varID) { $0.textWarning = joined }
-                        if let joined { checkCtx.log(.warning, joined) }
                     } catch {
                         // checagem é auxiliar: falha aqui não derruba a variação
                         if !(error is CancellationError) {
@@ -457,6 +618,9 @@ final class JobRunner: ObservableObject {
                         }
                     }
                 }
+                let joined = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
+                store.updateVariation(jobID, itemID, varID) { $0.textWarning = joined }
+                if let joined { ctx.log(.warning, joined) }
             } catch is CancellationError {
                 store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
                 return

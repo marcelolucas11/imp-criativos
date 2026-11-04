@@ -45,7 +45,9 @@ enum InstructionInterpreter {
 
         1. "remove": a list of visual elements, names or words that must be REMOVED from the images \
         (for example a brand or game name, a logo, a handle). One short item per element, in Brazilian Portuguese, \
-        keeping names exactly as the user wrote them (example: "Nome Aviator (escrito em qualquer lugar)").
+        keeping names exactly as the user wrote them and putting every word or name to erase between double quotes \
+        (example: Palavra "Aviator" (escrita em qualquer lugar)). Every word the user wants gone must appear here, \
+        one item per word or name.
         2. "text_changes": changes to the TEXT written in the images: words, names or phrases to add, \
         replace or rewrite. Write it as a short, precise instruction in Brazilian Portuguese, quoting the exact words \
         (example: Incluir o nome "Nome Novo" no topo; Trocar "R$ 10" por "R$ 5"). Empty string if none. \
@@ -82,13 +84,19 @@ enum InstructionInterpreter {
         let order = [preferred] + ProviderKind.allCases.filter { $0 != preferred && KeychainStore.hasKey($0) }
         var lastError: Error = Failure(message: "Nenhuma chave de API configurada.")
         for kind in order {
-            do {
-                let provider = try ProviderFactory.make(kind, config: config)
-                let answer = try await provider.complete(prompt: prompt(for: raw))
-                if let parsed = parse(answer, raw: raw) { return (parsed, kind) }
-                lastError = Failure(message: "A resposta do \(kind.label) não veio no formato esperado.")
-            } catch {
-                lastError = error
+            // 1.0.0-beta.7: usa o modelo de planejamento (mais forte); se não for aceito, o de análise
+            for planner in [true, false] {
+                do {
+                    let provider = try planner ? ProviderFactory.makePlanner(kind, config: config)
+                                               : ProviderFactory.make(kind, config: config)
+                    let answer = try await provider.complete(prompt: prompt(for: raw))
+                    if let parsed = parse(answer, raw: raw) { return (parsed, kind) }
+                    lastError = Failure(message: "A resposta do \(kind.label) não veio no formato esperado.")
+                    break
+                } catch {
+                    lastError = error
+                    if !(planner && (error.aiKind == .model || error.aiKind == .badRequest)) { break }
+                }
             }
         }
         throw lastError
