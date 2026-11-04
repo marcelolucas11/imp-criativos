@@ -6,6 +6,12 @@
 
 <p align="center">App para Mac que remove a marca de criativos e gera variações em lote com IA (Gemini ou GPT).</p>
 
+<p align="center">
+  <a href="https://github.com/marcelolucas11/imp-criativos/releases/download/mac/IMP-Criativos.dmg">
+    <img src="Resources/botao-baixar-mac.svg" width="340" alt="Baixar para Mac — IMP Criativos, versão mais nova">
+  </a>
+</p>
+
 ---
 
 ## O que faz
@@ -22,7 +28,7 @@ Exemplo: 50 criativos × 4 variações = **50 limpos + 200 variações**.
 
 ## Instalar
 
-1. Baixe o `.dmg` da [última versão](../../releases).
+1. Clique em **Baixar para Mac** acima (ou baixe o `.dmg` de qualquer versão em [Releases](../../releases)).
 2. Arraste o **IMP Criativos** para **Aplicativos**.
 3. Na primeira vez: **clique direito no app → Abrir → Abrir**.
    (Ou Ajustes do Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".)

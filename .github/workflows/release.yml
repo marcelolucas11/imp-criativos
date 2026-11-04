@@ -90,6 +90,25 @@ jobs:
           gh release create "$TAG" $PRERELEASE --target "$GITHUB_SHA" --title "IMP Criativos $VERSION" --notes-file notes.md \
             "dist/$ASSET.dmg" "dist/$ASSET.zip" "dist/$ASSET.zip.sha256"
 
+      # Link fixo do botão "Baixar para Mac" do README:
+      #   releases/download/mac/IMP-Criativos.dmg  →  sempre a versão mais nova (inclusive beta).
+      # A tag "mac" não é número de versão e não tem .zip, então o atualizador do app a ignora.
+      - name: Atualizar link fixo de download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "dist/$ASSET.dmg" dist/IMP-Criativos.dmg
+          NOTES="Link fixo usado pelo botão **Baixar para Mac** do README. Sempre contém a versão mais nova.
+
+          Versão atual: **$VERSION** · [notas desta versão](https://github.com/${{ github.repository }}/releases/tag/$TAG)"
+          if gh release view mac >/dev/null 2>&1; then
+            gh release upload mac dist/IMP-Criativos.dmg --clobber
+            gh release edit mac --notes "$NOTES" --prerelease --latest=false
+          else
+            gh release create mac --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Download — sempre a versão mais nova" --notes "$NOTES" dist/IMP-Criativos.dmg
+          fi
+
       - name: Guardar log
         if: always()
         uses: actions/upload-artifact@v4

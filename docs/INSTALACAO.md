@@ -2,7 +2,7 @@
 
 ## 1. Instalar
 
-1. Abra a página de [Releases](https://github.com/marcelolucas11/imp-criativos/releases) e baixe o arquivo `IMP-Criativos-<versão>.dmg`.
+1. Baixe a versão mais nova pelo link fixo [IMP-Criativos.dmg](https://github.com/marcelolucas11/imp-criativos/releases/download/mac/IMP-Criativos.dmg) (o mesmo do botão **Baixar para Mac** no README). Versões anteriores ficam em [Releases](https://github.com/marcelolucas11/imp-criativos/releases).
 2. Abra o `.dmg` e arraste **IMP Criativos** para a pasta **Aplicativos** (ou para outra pasta, como um SSD externo).
 3. **Primeira abertura:** como o app não é distribuído pela App Store, o macOS mostra um aviso.
    - Clique com o botão direito no app → **Abrir** → **Abrir**; ou
