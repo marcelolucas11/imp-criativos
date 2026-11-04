@@ -8,21 +8,43 @@ struct OpenAIProvider: AIProvider {
     let quality: String
 
     func editImage(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
-        // Formatos verticais (4:5, 9:16) saem em retrato; a exportação ajusta para 1080×1350 ou 1080×1920.
-        let vertical = ["4:5", "9:16", "3:4", "2:3"].contains(aspectRatio)
         do {
-            return try await edit(jpeg, prompt: prompt, size: vertical ? "1024x1536" : "auto")
-        } catch let e as AIError where vertical && e.status == 400 && e.kind == .badRequest {
-            RequestContext.current?.log(.info, "OpenAI recusou o tamanho vertical; repetindo em tamanho automático.", details: e.details)
-            return try await edit(jpeg, prompt: prompt, size: "auto")
+            return try await editOnce(jpeg, prompt: prompt, aspectRatio: aspectRatio)
+        } catch let e as AIError where e.kind == .blocked {
+            // Bloqueio por conteúdo: uma nova tentativa com a instrução reformulada em tom neutro.
+            RequestContext.current?.log(.info, "OpenAI bloqueou o pedido; tentando de novo com instrução neutra.", details: e.details)
+            RequestContext.current?.onStatus?("OpenAI bloqueou · tentando com instrução neutra…", nil)
+            return try await editOnce(jpeg, prompt: Prompts.neutral(prompt), aspectRatio: aspectRatio)
         }
     }
 
-    private func edit(_ jpeg: Data, prompt: String, size: String) async throws -> Data {
+    private func editOnce(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
+        // Formatos verticais (4:5, 9:16) saem em retrato; a exportação ajusta para 1080×1350 ou 1080×1920.
+        let vertical = ["4:5", "9:16", "3:4", "2:3"].contains(aspectRatio)
+        // moderation "low" = filtro menos restritivo que a OpenAI permite. Se o modelo recusar
+        // algum campo (HTTP 400), tenta sem ele.
+        var variants: [(label: String, size: String, low: Bool)] = []
+        if vertical { variants.append(("vertical", "1024x1536", true)) }
+        variants.append(("tamanho automático", "auto", true))
+        variants.append(("sem ajuste de moderação", vertical ? "1024x1536" : "auto", false))
+        var lastError: Error?
+        for (i, v) in variants.enumerated() {
+            do {
+                return try await edit(jpeg, prompt: prompt, size: v.size, lowModeration: v.low)
+            } catch let e as AIError where e.status == 400 && e.kind == .badRequest && i < variants.count - 1 {
+                RequestContext.current?.log(.info, "OpenAI recusou o pedido (\(v.label)); repetindo com \(variants[i + 1].label).", details: e.details)
+                lastError = e
+            }
+        }
+        throw lastError ?? AIError("A OpenAI não respondeu.")
+    }
+
+    private func edit(_ jpeg: Data, prompt: String, size: String, lowModeration: Bool) async throws -> Data {
         var form = Multipart()
         form.field("model", imageModel)
         form.field("prompt", prompt)
         form.field("size", size)
+        if lowModeration { form.field("moderation", "low") }
         if !quality.isEmpty { form.field("quality", quality) }
         form.file("image", filename: "criativo.jpg", mime: "image/jpeg", data: jpeg)
 

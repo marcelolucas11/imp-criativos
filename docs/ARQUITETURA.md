@@ -71,6 +71,11 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
   insistirem juntos.
 - **Troca automática** (`JobRunner.withFallback`): se a IA do lote falhar por erro temporário (ou bloqueio, se ligado) e a
   outra tiver chave, a etapa é refeita nela. O item guarda `providerUsed` e a tela mostra "feito com …".
+- **Filtro de conteúdo** (beta.5): o Gemini recebe `safety_settings` com `off` em todas as categorias ajustáveis
+  (`harassment`, `hate_speech`, `sexually_explicit`, `dangerous_content`, `jailbreak`); a OpenAI recebe
+  `moderation=low`. Se o modelo recusar esses campos (400), repete sem eles. Quando a resposta vem bloqueada, o próprio
+  provedor tenta uma vez de novo com `Prompts.neutral` (contexto de anúncio já publicado de empresa licenciada, só edição
+  gráfica) antes de o erro chegar à troca automática de IA. As proteções fixas dos provedores não são ajustáveis.
 - **Contexto da chamada** (`RequestContext`, task-local): leva lote, criativo e etapa até o `HTTP.send`, que avisa a tela
   ("Gemini ocupado (503) · tentativa 3/6", com contagem regressiva) e registra no histórico.
 

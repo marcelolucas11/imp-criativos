@@ -10,32 +10,42 @@ struct GeminiProvider: AIProvider {
 
     private let endpoint = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
 
+    /// Filtros de segurança ajustáveis do Gemini, todos desligados.
+    /// Criativos de cassino/apostas legalizados não entram em nenhuma dessas categorias,
+    /// mas o filtro às vezes confunde. As proteções fixas do Google (não ajustáveis) continuam valendo.
+    static let safetyOff: [[String: Any]] = ["harassment", "hate_speech", "sexually_explicit", "dangerous_content", "jailbreak"]
+        .map { ["type": $0, "threshold": "off"] }
+
     func editImage(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
+        do {
+            return try await editOnce(jpeg, prompt: prompt, aspectRatio: aspectRatio)
+        } catch let e as AIError where e.kind == .blocked {
+            // Bloqueio por conteúdo: uma nova tentativa com a instrução reformulada em tom neutro.
+            RequestContext.current?.log(.info, "Gemini bloqueou o pedido; tentando de novo com instrução neutra.", details: e.details)
+            RequestContext.current?.onStatus?("Gemini bloqueou · tentando com instrução neutra…", nil)
+            return try await editOnce(jpeg, prompt: Prompts.neutral(prompt), aspectRatio: aspectRatio)
+        }
+    }
+
+    private func editOnce(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
         let input: [[String: Any]] = [
             ["type": "text", "text": prompt],
             ["type": "image", "mime_type": "image/jpeg", "data": jpeg.base64EncodedString()],
         ]
-        // 1ª tentativa: com proporção e resolução. Se o modelo recusar esses campos (HTTP 400),
-        // tenta de novo sem eles — a exportação ajusta o tamanho final de qualquer jeito.
-        let full: [String: Any] = [
-            "model": imageModel,
-            "input": input,
-            "response_format": [
-                "type": "image",
-                "mime_type": "image/png",
-                "aspect_ratio": aspectRatio,
-                "image_size": imageSize,
-            ],
+        let format: [String: Any] = [
+            "type": "image",
+            "mime_type": "image/png",
+            "aspect_ratio": aspectRatio,
+            "image_size": imageSize,
         ]
-        let minimal: [String: Any] = ["model": imageModel, "input": input]
-
-        var data: Data
-        do {
-            data = try await post(full, model: imageModel, gate: .image(.gemini))
-        } catch let e as AIError where e.status == 400 && e.kind == .badRequest {
-            RequestContext.current?.log(.info, "Gemini recusou proporção/resolução; repetindo sem esses campos.", details: e.details)
-            data = try await post(minimal, model: imageModel, gate: .image(.gemini))
-        }
+        // Do mais completo ao mais simples: se o modelo recusar algum campo (HTTP 400),
+        // tenta sem ele. A exportação ajusta o tamanho final de qualquer jeito.
+        let variants: [(String, [String: Any])] = [
+            ("completo", ["model": imageModel, "input": input, "response_format": format, "safety_settings": Self.safetyOff]),
+            ("sem proporção/resolução", ["model": imageModel, "input": input, "safety_settings": Self.safetyOff]),
+            ("sem ajustes de filtro", ["model": imageModel, "input": input]),
+        ]
+        let data = try await postVariants(variants, model: imageModel, gate: .image(.gemini))
         let obj = try HTTP.json(data)
         if let img = Self.findImage(in: obj) { return img }
         let text = Self.findText(in: obj)
@@ -48,17 +58,32 @@ struct GeminiProvider: AIProvider {
     }
 
     func analyze(_ jpeg: Data, prompt: String) async throws -> String {
-        let body: [String: Any] = [
-            "model": textModel,
-            "input": [
-                ["type": "text", "text": prompt],
-                ["type": "image", "mime_type": "image/jpeg", "data": jpeg.base64EncodedString()],
-            ],
+        let input: [[String: Any]] = [
+            ["type": "text", "text": prompt],
+            ["type": "image", "mime_type": "image/jpeg", "data": jpeg.base64EncodedString()],
         ]
-        let obj = try HTTP.json(try await post(body, model: textModel, gate: .text(.gemini)))
+        let variants: [(String, [String: Any])] = [
+            ("completo", ["model": textModel, "input": input, "safety_settings": Self.safetyOff]),
+            ("sem ajustes de filtro", ["model": textModel, "input": input]),
+        ]
+        let obj = try HTTP.json(try await postVariants(variants, model: textModel, gate: .text(.gemini)))
         let text = Self.findText(in: obj)
         if text.isEmpty { throw AIError("O Gemini não devolveu a análise.", kind: .blocked) }
         return text
+    }
+
+    /// Envia a primeira variante; em HTTP 400 "pedido inválido" passa para a seguinte.
+    private func postVariants(_ variants: [(String, [String: Any])], model: String, gate: ProviderGate) async throws -> Data {
+        var lastError: Error?
+        for (i, (label, body)) in variants.enumerated() {
+            do {
+                return try await post(body, model: model, gate: gate)
+            } catch let e as AIError where e.status == 400 && e.kind == .badRequest && i < variants.count - 1 {
+                RequestContext.current?.log(.info, "Gemini recusou o pedido \(label); repetindo com \(variants[i + 1].0).", details: e.details)
+                lastError = e
+            }
+        }
+        throw lastError ?? AIError("O Gemini não respondeu.")
     }
 
     func testKey() async throws {

@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## [1.0.0-beta.5] — 2026-11-04
+
+**Menos bloqueios em criativos de cassino e apostas**
+
+- **Gemini com filtros ajustáveis desligados:** todas as categorias de segurança que o Google deixa configurar (assédio, ódio, conteúdo sexual, conteúdo perigoso e jailbreak) vão como "off" em cada pedido de imagem e de análise.
+- **OpenAI com moderação "low":** o nível menos restritivo que a OpenAI permite para gerar e editar imagens.
+- **Nova tentativa automática com instrução neutra:** se a IA bloquear, o app tenta mais uma vez explicando que é só uma edição gráfica de um anúncio já publicado de empresa licenciada, sem promessas novas. Só depois disso troca para a outra IA (se a opção estiver ligada em Configurações → Erros e tentativas).
+- Se algum modelo não aceitar esses ajustes, o app repete o pedido sem eles, em vez de falhar.
+- Corrigido: um erro 400 de "campo não aceito" que citava "safety" ou "moderation" era confundido com bloqueio de conteúdo.
+
 ## [1.0.0-beta.4] — 2026-11-04
 
 **Erros de IA ocupada (HTTP 503) não derrubam mais o lote**

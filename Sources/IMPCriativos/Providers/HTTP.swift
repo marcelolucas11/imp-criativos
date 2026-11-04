@@ -43,6 +43,10 @@ enum AIErrorKind: String, Codable {
         case 401, 403: return .auth
         case 404: return .model
         case 400, 422:
+            // campo desconhecido/valor inválido (ex.: "safety_settings" ou "moderation" que o modelo não aceita)
+            // é pedido inválido, não bloqueio — assim o app tenta de novo sem o campo.
+            let fieldWords = ["unknown name", "unknown parameter", "unrecognized", "invalid json payload", "invalid value", "not supported", "unsupported"]
+            if fieldWords.contains(where: { m.contains($0) }) { return .badRequest }
             if blockedWords.contains(where: { m.contains($0) }) { return .blocked }
             if m.contains("api key") || m.contains("api_key") { return .auth }
             return .badRequest
