@@ -120,9 +120,9 @@ struct NewJobView: View {
                         }
                         if sizeChoice == .custom {
                             HStack {
-                                TextField("Largura", value: $customW, format: .number).frame(width: 90)
+                                TextField("Largura", value: $customW, format: .number).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                                 Text("×")
-                                TextField("Altura", value: $customH, format: .number).frame(width: 90)
+                                TextField("Altura", value: $customH, format: .number).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                                 Text("px").foregroundStyle(.secondary)
                             }
                         }

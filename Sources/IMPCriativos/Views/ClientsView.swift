@@ -95,7 +95,9 @@ struct ClientEditor: View {
                 Section {
                     ForEach(Array(draft.removeItems.indices), id: \.self) { i in
                         HStack {
-                            TextField("Item a remover", text: itemBinding(i))
+                            TextField(text: itemBinding(i), prompt: Text("Item a remover")) { EmptyView() }
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
                             Button(role: .destructive) {
                                 if i < draft.removeItems.count { draft.removeItems.remove(at: i) }
                             } label: { Image(systemName: "minus.circle") }
@@ -114,13 +116,18 @@ struct ClientEditor: View {
                     ForEach($draft.axes) { $axis in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                TextField("Nome do eixo", text: $axis.name).font(.headline)
+                                TextField(text: $axis.name, prompt: Text("Nome do eixo")) { EmptyView() }
+                                    .labelsHidden()
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.headline)
                                 Button(role: .destructive) {
                                     draft.axes.removeAll { $0.id == axis.id }
                                 } label: { Image(systemName: "minus.circle") }
                                 .buttonStyle(.borderless)
                             }
-                            TextField("Instrução para a IA", text: $axis.instruction, axis: .vertical)
+                            TextField(text: $axis.instruction, prompt: Text("Instrução para a IA"), axis: .vertical) { EmptyView() }
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
                                 .lineLimit(2...5)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
@@ -142,7 +149,9 @@ struct ClientEditor: View {
                 }
 
                 Section {
-                    TextField("Ex.: nunca mudar a cor do carro; manter o selo 'Autorizado'", text: $draft.extraInstructions, axis: .vertical)
+                    TextField(text: $draft.extraInstructions, prompt: Text("Ex.: nunca mudar a cor do carro; manter o selo 'Autorizado'"), axis: .vertical) { EmptyView() }
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
                         .lineLimit(3...8)
                 } header: {
                     Text("Instruções extras")

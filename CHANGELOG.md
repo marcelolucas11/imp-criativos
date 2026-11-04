@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## [1.0.0-beta.2] — 2026-11-04
+
+- Corrigido: o campo para colar a chave de API não aparecia nas Configurações (sobrava só o texto de dica).
+- Novo: botão **Colar** e botão de olho para conferir a chave colada antes de salvar; Enter também salva.
+- Corrigido: campos de texto em Clientes (itens a remover, eixos, instruções) e no tamanho personalizado agora aparecem com borda e largura certa.
+
 ## [1.0.0-beta.1] — 2026-11-04
 
 Primeira versão de testes.

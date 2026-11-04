@@ -367,6 +367,7 @@ struct ReviewBar: View {
                         Text("Refazer").font(.headline)
                         Text("O que corrigir? (opcional)").font(.caption).foregroundStyle(.secondary)
                         TextField("Ex.: sobrou o @ no canto inferior", text: $note, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
                             .lineLimit(2...4)
                             .frame(width: 280)
                         HStack {

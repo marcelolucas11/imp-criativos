@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
@@ -75,13 +76,13 @@ struct SettingsView: View {
                     }
 
                     Section {
-                        LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).frame(width: 260) }
-                        LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).frame(width: 260) }
+                        LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
+                        LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         Picker("Gemini — resolução", selection: $settings.geminiImageSize) {
                             Text("1K").tag("1K"); Text("2K").tag("2K"); Text("4K").tag("4K")
                         }
-                        LabeledContent("OpenAI — imagem") { TextField("", text: $settings.openaiImageModel).frame(width: 260) }
-                        LabeledContent("OpenAI — análise") { TextField("", text: $settings.openaiTextModel).frame(width: 260) }
+                        LabeledContent("OpenAI — imagem") { TextField("", text: $settings.openaiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
+                        LabeledContent("OpenAI — análise") { TextField("", text: $settings.openaiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
                         Picker("OpenAI — qualidade", selection: $settings.openaiQuality) {
                             Text("Baixa").tag("low"); Text("Média").tag("medium"); Text("Alta").tag("high")
                         }
@@ -94,13 +95,13 @@ struct SettingsView: View {
 
                     Section {
                         LabeledContent("Gemini — por imagem (US$)") {
-                            TextField("", value: $settings.priceGeminiImage, format: .number.precision(.fractionLength(3))).frame(width: 90)
+                            TextField("", value: $settings.priceGeminiImage, format: .number.precision(.fractionLength(3))).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                         }
                         LabeledContent("OpenAI — por imagem (US$)") {
-                            TextField("", value: $settings.priceOpenAIImage, format: .number.precision(.fractionLength(3))).frame(width: 90)
+                            TextField("", value: $settings.priceOpenAIImage, format: .number.precision(.fractionLength(3))).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                         }
                         LabeledContent("Checagem/análise (US$)") {
-                            TextField("", value: $settings.priceAnalysis, format: .number.precision(.fractionLength(4))).frame(width: 90)
+                            TextField("", value: $settings.priceAnalysis, format: .number.precision(.fractionLength(4))).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 90)
                         }
                     } header: {
                         Text("Tabela de preços (estimativa)")
@@ -144,13 +145,38 @@ struct APIKeyRow: View {
     @State private var status: String?
     @State private var ok = false
     @State private var testing = false
+    @State private var reveal = false
+
+    private var placeholder: String { hasKey ? "Chave salva — cole outra para trocar" : "Cole a chave aqui" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(provider.label).frame(width: 110, alignment: .leading)
-                SecureField(hasKey ? "•••••••• (salva)" : "Cole a chave aqui", text: $value)
-                Button("Salvar") { save() }.disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
+            HStack(spacing: 8) {
+                Text(provider.label).frame(width: 100, alignment: .leading)
+                Group {
+                    if reveal {
+                        TextField(text: $value, prompt: Text(placeholder)) { EmptyView() }
+                    } else {
+                        SecureField(text: $value, prompt: Text(placeholder)) { EmptyView() }
+                    }
+                }
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 240, maxWidth: .infinity)
+                .onSubmit { if !value.isEmpty { save() } }
+
+                Button { reveal.toggle() } label: { Image(systemName: reveal ? "eye.slash" : "eye") }
+                    .buttonStyle(.borderless)
+                    .help(reveal ? "Ocultar" : "Mostrar o que foi colado")
+                Button("Colar") {
+                    if let s = NSPasteboard.general.string(forType: .string) {
+                        value = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+                .help("Cola a chave copiada")
+                Button("Salvar") { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button {
                     Task { await test() }
                 } label: {
