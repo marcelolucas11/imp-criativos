@@ -1,14 +1,12 @@
 name: Release
 
-# Publica uma versão quando uma tag vX.Y.Z (ou vX.Y.Z-beta.N) é enviada.
+# Publica uma versão quando o arquivo VERSION muda na main.
+# A tag vX.Y.Z é criada pelo próprio GitHub ao publicar a Release.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag existente para publicar (ex.: v1.0.0-beta.1)"
-        required: true
 
 permissions:
   contents: write
@@ -16,19 +14,20 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Versão
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${TAG#v}"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          TAG="v$VERSION"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "ASSET=IMP-Criativos-$VERSION" >> "$GITHUB_ENV"
           if [[ "$VERSION" == *-* ]]; then echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV"; else echo "PRERELEASE=" >> "$GITHUB_ENV"; fi
+          echo "Publicando $TAG"
 
       - name: Instalar XcodeGen
         run: brew install xcodegen
@@ -87,8 +86,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          gh release create "$TAG" $PRERELEASE --title "IMP Criativos $VERSION" --notes-file notes.md \
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" $PRERELEASE --target "$GITHUB_SHA" --title "IMP Criativos $VERSION" --notes-file notes.md \
             "dist/$ASSET.dmg" "dist/$ASSET.zip" "dist/$ASSET.zip.sha256"
 
       - name: Guardar log

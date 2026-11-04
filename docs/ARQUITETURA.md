@@ -88,8 +88,8 @@ identidade entre versões (sem novo pedido de Keychain e com verificação de or
 ## Publicação
 
 - `ci.yml`: compila a cada push em `main`/`dev` e mostra erros como anotações.
-- `release.yml`: ao enviar uma tag `v*`, compila em Release, empacota `.dmg`, `.zip` e `.sha256` e cria a Release
-  (marcada como pré-lançamento quando a versão tem `-beta`).
+- `release.yml`: quando o arquivo `VERSION` muda na `main`, compila em Release, empacota `.dmg`, `.zip` e `.sha256`,
+  cria a tag `v<VERSION>` e publica a Release (pré-lançamento quando a versão tem `-beta`).
 
 ## Fora da v1
 

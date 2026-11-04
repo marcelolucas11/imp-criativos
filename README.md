@@ -53,6 +53,6 @@ xcodegen generate
 open IMPCriativos.xcodeproj
 ```
 
-Publicar versão: atualize o `CHANGELOG.md`, crie a tag `vX.Y.Z` (ou `vX.Y.Z-beta.N`) e envie. O GitHub Actions compila e publica a Release.
+Publicar versão: escreva a seção no `CHANGELOG.md`, troque o número no arquivo `VERSION` (ex.: `1.0.0-beta.2`) e envie para a `main`. O GitHub Actions compila, cria a tag e publica a Release.
 
 © 2026 Impera Services
