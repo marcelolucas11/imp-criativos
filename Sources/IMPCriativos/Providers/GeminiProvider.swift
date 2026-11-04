@@ -72,6 +72,18 @@ struct GeminiProvider: AIProvider {
         return text
     }
 
+    func complete(prompt: String) async throws -> String {
+        let input: [[String: Any]] = [["type": "text", "text": prompt]]
+        let variants: [(String, [String: Any])] = [
+            ("completo", ["model": textModel, "input": input, "safety_settings": Self.safetyOff]),
+            ("sem ajustes de filtro", ["model": textModel, "input": input]),
+        ]
+        let obj = try HTTP.json(try await postVariants(variants, model: textModel, gate: .text(.gemini)))
+        let text = Self.findText(in: obj)
+        if text.isEmpty { throw AIError("O Gemini não devolveu resposta.", kind: .blocked) }
+        return text
+    }
+
     /// Envia a primeira variante; em HTTP 400 "pedido inválido" passa para a seguinte.
     private func postVariants(_ variants: [(String, [String: Any])], model: String, gate: ProviderGate) async throws -> Data {
         var lastError: Error?

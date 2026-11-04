@@ -20,6 +20,7 @@
 2. **Limpa** cada criativo: remove logo, nome da empresa, @, site, telefone, CNPJ — a lista é editável por cliente.
 3. **Confere** a limpeza e transcreve o texto do criativo.
 4. **Gera N variações** de cada um, cada uma num eixo diferente (fundo, composição, iluminação, ângulo…), mantendo o texto exato.
+   - **Instruções por lote (opcional):** no Novo lote, escreva em texto livre o que quer (ex.: "tirar todo nome Aviator, adicionar o nome Y, ângulos bem variados"). O app separa em *remover*, *alterar texto* e *direção das variações*, mostra para você conferir e aplica cada parte na etapa certa.
 5. **Confere o texto** de cada variação e marca divergências.
 6. **Fila de revisão**: aprovar, refazer (com observação) ou descartar.
 7. **Baixa os aprovados** nos tamanhos verticais padrão do Meta Ads: 1080×1350 (feed 4:5) ou 1080×1920 (stories e reels 9:16).

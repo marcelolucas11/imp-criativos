@@ -17,6 +17,8 @@ struct ClientProfile: Codable, Identifiable, Hashable {
     var defaultVariations: Int
     var extraInstructions: String
     var createdAt = Date()
+    /// 1.0.0-beta.6: instruções de lote salvas para reaproveitar (opcional para abrir perfis antigos).
+    var savedInstructions: [String]?
 
     static let defaultRemoveItems: [String] = [
         "Logotipo da empresa",

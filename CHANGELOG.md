@@ -1,5 +1,20 @@
 # Histórico de versões
 
+## [1.0.0-beta.6] — 2026-11-04
+
+**Instruções por lote**
+
+- **Nova caixa "Instruções para este lote" no Novo lote.** Escreva em texto livre, por exemplo: *tirar todo nome Aviator, tirar o nome X, adicionar o nome Y, criar ângulos bem diferentes e variados*.
+- **O app interpreta o pedido em três partes** e mostra para você conferir e editar antes de iniciar:
+  - **Remover também:** entra na limpeza e nas checagens de sobra de marca deste lote.
+  - **Alterar o texto:** a limpeza já aplica a mudança, e o texto esperado das variações passa a ser o texto alterado. A checagem de texto confere se o nome novo saiu certo.
+  - **Direção das variações:** somada ao eixo de cada variação.
+- A interpretação usa a IA das checagens (uma chamada de texto, custo desprezível). Se ela falhar, tenta a outra IA; se as duas falharem, o texto vai inteiro para "Direção" e você ajusta.
+- **Instruções salvas por cliente:** botão "Salvar no cliente" e menu "Instruções salvas" para reaproveitar em outros lotes.
+- As instruções aparecem no topo do lote e ficam registradas no Histórico.
+- Se a limpeza não aplicar a alteração de texto, o criativo ganha um aviso, e as variações aplicam mesmo assim.
+- **Botão "Baixar para Mac" no README** com link fixo que sempre baixa a versão mais nova.
+
 ## [1.0.0-beta.5] — 2026-11-04
 
 **Menos bloqueios em criativos de cassino e apostas**

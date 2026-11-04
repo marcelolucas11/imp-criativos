@@ -111,6 +111,8 @@ struct JobItem: Codable, Identifiable, Hashable {
     var cleanRedoNote: String?
     var analysisDone = false
     var transcript: String?
+    /// 1.0.0-beta.6: texto realmente visto no limpo, quando difere do esperado (alterações de texto do lote).
+    var seenText: String?
 
     // 1.0.0-beta.4 (opcionais para abrir lotes antigos)
     var cleanErrorKind: AIErrorKind?
@@ -160,6 +162,17 @@ struct Job: Codable, Identifiable, Hashable {
     var costUSD: Double = 0
     var exportedTo: String?
     var lastError: String?
+
+    // 1.0.0-beta.6 (opcional para abrir lotes antigos)
+    /// Instruções livres do Novo lote, já separadas em remover / texto / direção.
+    var instructions: BatchInstructions?
+
+    /// Lista do cliente + o que as instruções do lote mandam remover.
+    var effectiveRemoveItems: [String] {
+        var list = client.removeItems
+        for r in instructions?.removeItems ?? [] where !list.contains(r) { list.append(r) }
+        return list
+    }
 
     /// Total de etapas de geração (limpeza + variações) para a barra de progresso.
     var totalSteps: Int { items.reduce(0) { $0 + 1 + $1.variations.count } }
