@@ -265,8 +265,10 @@ final class JobRunner: ObservableObject {
     private func process(jobID: UUID, itemID: UUID, providers: [ProviderKind: AIProvider], rule: FallbackRule, attempts: Int) async {
         guard let job = store.job(jobID), let item = job.items.first(where: { $0.id == itemID }) else { return }
         let folder = store.folder(for: jobID)
-        let removeItems = job.client.removeItems
+        let removeItems = job.effectiveRemoveItems
         let extra = job.client.extraInstructions
+        let textChanges = job.instructions?.textChanges ?? ""
+        let direction = job.instructions?.direction ?? ""
         let name = item.sourceName
 
         // 1. LIMPEZA
@@ -288,7 +290,7 @@ final class JobRunner: ObservableObject {
                     throw AIError("Não foi possível ler a imagem original.")
                 }
                 let aspect = Self.aspect(job.sizeMode, width: item.pixelWidth, height: item.pixelHeight)
-                let prompt = Prompts.clean(removeItems: removeItems, extra: extra, redoNote: item.cleanRedoNote)
+                let prompt = Prompts.clean(removeItems: removeItems, extra: extra, textChanges: textChanges, redoNote: item.cleanRedoNote)
                 let primary = item.cleanProviderOverride ?? job.cleanProvider
                 let (result, used) = try await withFallback(primary, providers, rule: rule, ctx: ctx) {
                     try await $0.editImage(upload, prompt: prompt, aspectRatio: aspect)
@@ -338,7 +340,7 @@ final class JobRunner: ObservableObject {
                 guard let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(cleanedURL) }).value else {
                     throw AIError("Não foi possível ler a imagem limpa.")
                 }
-                let prompt = Prompts.analysis(removeItems: removeItems)
+                let prompt = Prompts.analysis(removeItems: removeItems, textChanges: textChanges)
                 let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: ctx) {
                     try await $0.analyze(jpeg, prompt: prompt)
                 }
@@ -347,9 +349,17 @@ final class JobRunner: ObservableObject {
                 let isClean = (obj["clean"] as? Bool) ?? true
                 let found = (obj["found"] as? [String]) ?? []
                 let text = (obj["text"] as? String) ?? ""
-                let warning = isClean ? nil : "Possível sobra de marca: " + (found.isEmpty ? "verifique" : found.joined(separator: ", "))
+                // Com alterações de texto no lote, o texto esperado das variações é o final (já alterado).
+                let finalText = ((obj["final_text"] as? String)?.trimmed).flatMap { $0.isEmpty ? nil : $0 }
+                let expected = textChanges.trimmed.isEmpty ? text : (finalText ?? text)
+                let changesMissing = !textChanges.trimmed.isEmpty && (obj["changes_applied"] as? Bool) == false
+                var warnings: [String] = []
+                if !isClean { warnings.append("Possível sobra de marca: " + (found.isEmpty ? "verifique" : found.joined(separator: ", "))) }
+                if changesMissing { warnings.append("Alteração de texto não aplicada no limpo (as variações vão aplicar): \(textChanges.trimmed)") }
+                let warning = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
                 store.updateItem(jobID, itemID) {
-                    $0.transcript = text
+                    $0.transcript = expected
+                    $0.seenText = expected == text ? nil : text
                     $0.cleanWarning = warning
                     $0.analysisDone = true
                 }
@@ -393,7 +403,8 @@ final class JobRunner: ObservableObject {
             }
             do {
                 let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
-                let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, redoNote: v.redoNote)
+                let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
+                                               textChanges: textChanges, redoNote: v.redoNote)
                 let primary = v.providerOverride ?? job.variationProvider
                 let (result, used) = try await withFallback(primary, providers, rule: rule, ctx: ctx) {
                     try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)

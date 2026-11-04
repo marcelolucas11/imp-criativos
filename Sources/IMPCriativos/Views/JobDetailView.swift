@@ -93,6 +93,15 @@ struct JobDetailView: View {
                     .help("Gasto estimado deste lote")
             }
 
+            if let ins = job.instructions, !ins.isEmpty {
+                Label {
+                    Text(ins.summary).font(.caption).lineLimit(2)
+                } icon: {
+                    Image(systemName: "text.bubble").foregroundStyle(Brand.red)
+                }
+                .help("Instruções deste lote:\n\(ins.raw)\n\n\(ins.summary)")
+            }
+
             HStack(spacing: 10) {
                 ProgressView(value: job.progress)
                 Text("\(job.finishedSteps)/\(job.totalSteps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -283,7 +292,9 @@ struct ItemCard: View {
                     Text("\(item.pixelWidth)×\(item.pixelHeight)").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if let t = item.transcript, !t.isEmpty {
-                        Image(systemName: "text.quote").foregroundStyle(.secondary).help("Texto detectado:\n\(t)")
+                        Image(systemName: "text.quote").foregroundStyle(.secondary)
+                            .help(item.seenText.map { "Texto esperado nas variações:\n\(t)\n\nTexto visto no limpo:\n\($0)" }
+                                  ?? "Texto detectado:\n\(t)")
                     }
                 }
                 ScrollView(.horizontal, showsIndicators: true) {

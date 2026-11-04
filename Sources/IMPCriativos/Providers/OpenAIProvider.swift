@@ -93,6 +93,28 @@ struct OpenAIProvider: AIProvider {
         return text
     }
 
+    func complete(prompt: String) async throws -> String {
+        let body: [String: Any] = [
+            "model": textModel,
+            "response_format": ["type": "json_object"],
+            "messages": [["role": "user", "content": prompt]],
+        ]
+        var req = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let obj = try HTTP.json(try await HTTP.send(req, label: "OpenAI · \(textModel)", gate: .text(.openai)))
+        guard let d = obj as? [String: Any],
+              let choice = (d["choices"] as? [[String: Any]])?.first,
+              let msg = choice["message"] as? [String: Any],
+              let text = msg["content"] as? String, !text.isEmpty else {
+            throw AIError("A OpenAI não devolveu resposta.", kind: .blocked)
+        }
+        return text
+    }
+
     func testKey() async throws {
         var req = URLRequest(url: URL(string: "https://api.openai.com/v1/models")!)
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")

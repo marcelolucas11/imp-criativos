@@ -91,7 +91,8 @@ final class JobStore: ObservableObject {
                    analysisProvider: ProviderKind,
                    sizeMode: OutputSizeMode,
                    format: OutputFormat,
-                   verifyText: Bool) throws -> Job {
+                   verifyText: Bool,
+                   instructions: BatchInstructions? = nil) throws -> Job {
         let id = UUID()
         let folder = folder(for: id)
         let originals = Paths.ensure(folder.appendingPathComponent("originais", isDirectory: true))
@@ -126,7 +127,8 @@ final class JobStore: ObservableObject {
                       sizeMode: sizeMode,
                       format: format,
                       verifyText: verifyText,
-                      items: items)
+                      items: items,
+                      instructions: (instructions?.isEmpty ?? true) ? nil : instructions)
         save(job)
         return job
     }

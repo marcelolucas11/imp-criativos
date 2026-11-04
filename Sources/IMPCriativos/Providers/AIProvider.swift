@@ -6,6 +6,8 @@ protocol AIProvider {
     func editImage(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data
     /// Analisa uma imagem e responde em texto (pedimos JSON no prompt).
     func analyze(_ jpeg: Data, prompt: String) async throws -> String
+    /// Pedido só de texto, sem imagem (pedimos JSON no prompt). Usado para interpretar as instruções do lote.
+    func complete(prompt: String) async throws -> String
     /// Confere se a chave funciona.
     func testKey() async throws
 }

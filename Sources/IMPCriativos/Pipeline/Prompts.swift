@@ -3,7 +3,7 @@ import Foundation
 /// Instruções enviadas às IAs. Em inglês porque os modelos seguem melhor,
 /// mas sempre exigindo que o texto em português seja mantido exatamente.
 enum Prompts {
-    static func clean(removeItems: [String], extra: String, redoNote: String?) -> String {
+    static func clean(removeItems: [String], extra: String, textChanges: String = "", redoNote: String?) -> String {
         let list = removeItems.map { "- \($0)" }.joined(separator: "\n")
         var p = """
         Edit this advertising image. Completely remove ALL of the following brand-identifying elements:
@@ -16,14 +16,43 @@ enum Prompts {
         if !extra.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             p += "\n\nAdditional instructions from the user (Brazilian Portuguese): \(extra)"
         }
+        if !textChanges.trimmed.isEmpty {
+            p += """
+
+
+            After removing the elements above, apply ONLY these changes to the text of the image, requested by the user \
+            (Brazilian Portuguese). Write any new words exactly as quoted, with correct accents, in a style that matches \
+            the existing typography. This is the only text you may add or change:
+            \(textChanges.trimmed)
+            """
+        }
         if let note = redoNote, !note.isEmpty {
             p += "\n\nThe previous attempt was rejected. Fix this (Brazilian Portuguese): \(note)"
         }
         return p
     }
 
-    static func analysis(removeItems: [String]) -> String {
+    static func analysis(removeItems: [String], textChanges: String = "") -> String {
         let list = removeItems.map { "- \($0)" }.joined(separator: "\n")
+        let changes = textChanges.trimmed
+        if !changes.isEmpty {
+            return """
+            You are a quality checker for advertising images.
+            1) This image must NOT contain any of these brand-identifying elements:
+            \(list)
+            Check carefully whether any trace of them remains (partial logos, leftover letters, faded watermarks).
+            2) Transcribe ALL visible text in the image exactly as written (Brazilian Portuguese), preserving accents, \
+            capitalization, numbers and line breaks. Do not translate or fix anything.
+            3) The user requested these text changes (Brazilian Portuguese):
+            \(changes)
+            Write the FINAL text the image should have: the transcription from step 2 with these changes applied \
+            (if they are already present, it is identical to the transcription). Say whether the image already shows them.
+
+            Respond ONLY with JSON in this exact shape:
+            {"clean": true or false, "found": ["short description of each leftover element"], "text": "full transcription", \
+            "final_text": "text with the requested changes applied", "changes_applied": true or false}
+            """
+        }
         return """
         You are a quality checker for advertising images.
         1) This image must NOT contain any of these brand-identifying elements:
@@ -37,7 +66,7 @@ enum Prompts {
         """
     }
 
-    static func variation(axis: VariationAxis, transcript: String?, extra: String, redoNote: String?) -> String {
+    static func variation(axis: VariationAxis, transcript: String?, extra: String, direction: String = "", textChanges: String = "", redoNote: String?) -> String {
         var p = """
         Create a NEW variation of this advertising creative for A/B testing.
         Direction for this variation: \(axis.instruction)
@@ -45,8 +74,18 @@ enum Prompts {
         Keep the same main subject/prize with its real characteristics (never invent or change real details of the product), \
         the same offer and the same message. The result must be clearly different from the reference in the direction above, \
         with high quality, professional ad design.
-        Do not add any logo, brand name, watermark, social media handle, phone number or website.
+        Do not add any logo, brand name, watermark, social media handle, phone number or website \
+        (other than words that are part of the required text, when there is one).
         """
+        if !direction.trimmed.isEmpty {
+            p += """
+
+
+            Overall direction for every variation of this batch, requested by the user (Brazilian Portuguese). \
+            Follow it together with the direction above, and make this variation clearly different from the others:
+            \(direction.trimmed)
+            """
+        }
         if let t = transcript?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
             p += """
 
@@ -56,6 +95,14 @@ enum Prompts {
             <<<
             \(t)
             >>>
+            """
+        } else if !textChanges.trimmed.isEmpty {
+            p += """
+
+
+            Keep the text of the reference, applying only these changes requested by the user (Brazilian Portuguese). \
+            Write any new words exactly as quoted, with correct accents:
+            \(textChanges.trimmed)
             """
         } else {
             p += "\n\nThe reference has no text. Do not add any text."
