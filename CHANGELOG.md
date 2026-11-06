@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## [1.0.0-beta.13] — 2026-11-06
+
+**Ordem dos eixos de variação**
+
+- **Botões de subir e descer** em cada eixo de variação (Clientes → Eixos de variação). A ordem define qual eixo cada variação usa: a v1 usa o 1º, a v2 o 2º, e assim por diante.
+- Cada eixo mostra a posição (1º, 2º, 3º…) ao lado do nome. As setas ficam apagadas no primeiro e no último.
+- A nova ordem vale ao salvar o cliente e é usada nos próximos lotes.
+
 ## [1.0.0-beta.12] — 2026-11-06
 
 **Todos os modelos já prontos no menu**

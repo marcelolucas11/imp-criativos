@@ -89,6 +89,20 @@ struct ClientEditor: View {
                 set: { if i < draft.removeItems.count { draft.removeItems[i] = $0 } })
     }
 
+    private func axisPosition(_ id: VariationAxis.ID) -> Int {
+        draft.axes.firstIndex { $0.id == id } ?? 0
+    }
+
+    /// Sobe (-1) ou desce (+1) um eixo na ordem de uso das variações.
+    private func moveAxis(_ id: VariationAxis.ID, by offset: Int) {
+        guard let from = draft.axes.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + offset
+        guard draft.axes.indices.contains(to) else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            draft.axes.swapAt(from, to)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Form {
@@ -121,12 +135,30 @@ struct ClientEditor: View {
 
                 Section {
                     ForEach($draft.axes) { $axis in
+                        let position = axisPosition(axis.id)
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
+                                Text("\(position + 1)º")
+                                    .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(minWidth: 22, alignment: .trailing)
+                                    .help("Ordem de uso: v\(position + 1) usa este eixo")
                                 TextField(text: $axis.name, prompt: Text("Nome do eixo")) { EmptyView() }
                                     .labelsHidden()
                                     .textFieldStyle(.roundedBorder)
                                     .font(.headline)
+                                Button {
+                                    moveAxis(axis.id, by: -1)
+                                } label: { Image(systemName: "chevron.up") }
+                                .buttonStyle(.borderless)
+                                .disabled(position == 0)
+                                .help("Subir (usar antes)")
+                                Button {
+                                    moveAxis(axis.id, by: 1)
+                                } label: { Image(systemName: "chevron.down") }
+                                .buttonStyle(.borderless)
+                                .disabled(position >= draft.axes.count - 1)
+                                .help("Descer (usar depois)")
                                 Button(role: .destructive) {
                                     draft.axes.removeAll { $0.id == axis.id }
                                 } label: { Image(systemName: "minus.circle") }
