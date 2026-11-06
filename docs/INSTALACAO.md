@@ -53,6 +53,6 @@ Pode fechar a janela: com "Continuar em segundo plano" ligado, o app vai para a 
 |---|---|
 | "Chave não configurada" | Configurações → Chaves de API |
 | Muitas falhas com HTTP 429 | Limite da sua conta na API: reduza "Criativos processados ao mesmo tempo" |
-| "modelo não encontrado" | O provedor trocou o nome do modelo: atualize em Configurações → Modelos de IA |
+| "modelo não encontrado" | O provedor trocou o nome do modelo: em Configurações → Modelos de IA, clique em "Atualizar lista de modelos" e escolha outro (ou defina uma reserva) |
 | Atualização pede para mover o app | Mova o app para Aplicativos e abra de lá |
 | Texto saiu errado numa variação | Use ↻ com a observação "manter o texto exatamente igual" ou troque a IA das variações para GPT |

@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## [1.0.0-beta.11] — 2026-11-06
+
+**Escolha de plataforma e modelo por etapa, com IA reserva**
+
+- **Configurações → Modelos de IA virou menu.** No lugar das caixas de texto, cada etapa (Limpeza, Variações, Análise e checagem, Planejamento) tem um botão que abre **plataforma › modelo**: escolha Google (Gemini) ou OpenAI (GPT) e, dentro dela, a versão.
+- **Nova caixa "Reserva se der erro" em cada etapa.** Você escolhe qual plataforma e modelo assume quando a principal falha (pode ser a outra plataforma ou outro modelo da mesma), ou "Nenhuma". A troca agora vale para qualquer erro da principal (sobrecarga, modelo não encontrado, chave, pedido recusado); o bloqueio de conteúdo continua dependendo da opção em Erros e tentativas.
+- **Lista de modelos atualizada pela sua chave.** O app pergunta ao Google e à OpenAI quais modelos a sua chave enxerga (botão "Atualizar lista de modelos", e sozinho uma vez por dia ou ao salvar uma chave). Modelo que ainda não aparece: "Digitar outro modelo…".
+- **Novo lote usa o mesmo menu** para a IA da limpeza, das variações e das checagens; a escolha vira a principal da etapa.
+- **O planejamento tem IA própria** (antes seguia a IA das checagens do lote). A interpretação das instruções do lote usa a IA do planejamento e, se falhar, a da análise.
+- **Migração automática:** as escolhas e os nomes de modelo que você já tinha viram a principal de cada etapa, com a outra plataforma como reserva.
+
 ## [1.0.0-beta.10] — 2026-11-06
 
 **Fim do pedido de senha do Keychain**

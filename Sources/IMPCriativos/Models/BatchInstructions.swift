@@ -77,26 +77,22 @@ enum InstructionInterpreter {
         return BatchInstructions(raw: raw, removeItems: remove, textChanges: changes, direction: direction)
     }
 
-    /// Tenta a IA escolhida e, se falhar, a outra (quando houver chave).
+    /// Tenta a IA de planejamento (principal e reserva) e, se falhar, a de análise. Só usa IAs com chave.
     @MainActor
     static func interpret(_ raw: String, preferred: ProviderKind, settings: AppSettings) async throws -> (BatchInstructions, ProviderKind) {
         let config = ProviderConfig(settings)
-        let order = [preferred] + ProviderKind.allCases.filter { $0 != preferred && APIKeyStore.hasKey($0) }
+        var seen = Set<ModelChoice>()
+        let order = (config.chain(.planning) + config.chain(.analysis, prefer: preferred))
+            .filter { APIKeyStore.hasKey($0.provider) && seen.insert($0).inserted }
         var lastError: Error = Failure(message: "Nenhuma chave de API configurada.")
-        for kind in order {
-            // 1.0.0-beta.7: usa o modelo de planejamento (mais forte); se não for aceito, o de análise
-            for planner in [true, false] {
-                do {
-                    let provider = try planner ? ProviderFactory.makePlanner(kind, config: config)
-                                               : ProviderFactory.make(kind, config: config)
-                    let answer = try await provider.complete(prompt: prompt(for: raw))
-                    if let parsed = parse(answer, raw: raw) { return (parsed, kind) }
-                    lastError = Failure(message: "A resposta do \(kind.label) não veio no formato esperado.")
-                    break
-                } catch {
-                    lastError = error
-                    if !(planner && (error.aiKind == .model || error.aiKind == .badRequest)) { break }
-                }
+        for choice in order {
+            do {
+                let provider = try ProviderFactory.make(choice, config: config)
+                let answer = try await provider.complete(prompt: prompt(for: raw))
+                if let parsed = parse(answer, raw: raw) { return (parsed, choice.provider) }
+                lastError = Failure(message: "A resposta do \(choice.label) não veio no formato esperado.")
+            } catch {
+                lastError = error
             }
         }
         throw lastError

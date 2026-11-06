@@ -14,54 +14,61 @@ protocol AIProvider {
 
 /// Configuração lida das Configurações no momento em que o lote roda.
 struct ProviderConfig {
-    var geminiImageModel: String
-    var geminiTextModel: String
     /// Resolução pedida ao Gemini. 2K cobre com folga 1080×1350 e 1080×1920.
     var geminiImageSize = "2K"
-    var openaiImageModel: String
-    var openaiTextModel: String
     var openaiQuality: String
-    var geminiPlannerModel: String = ""
-    var openaiPlannerModel: String = ""
+    /// 1.0.0-beta.11: plataforma + modelo de cada etapa, com reserva.
+    var stages: [AIStage: StageAI]
 
     @MainActor
     init(_ s: AppSettings) {
-        geminiImageModel = s.geminiImageModel.trimmingCharacters(in: .whitespaces)
-        geminiTextModel = s.geminiTextModel.trimmingCharacters(in: .whitespaces)
-        openaiImageModel = s.openaiImageModel.trimmingCharacters(in: .whitespaces)
-        openaiTextModel = s.openaiTextModel.trimmingCharacters(in: .whitespaces)
         openaiQuality = s.openaiQuality
-        geminiPlannerModel = s.geminiPlannerModel.trimmingCharacters(in: .whitespaces)
-        openaiPlannerModel = s.openaiPlannerModel.trimmingCharacters(in: .whitespaces)
+        var clean: [AIStage: StageAI] = [:]
+        for st in AIStage.allCases {
+            var v = s.stage(st)
+            v.primary.model = v.primary.model.trimmingCharacters(in: .whitespaces)
+            v.backup?.model = v.backup?.model.trimmingCharacters(in: .whitespaces) ?? ""
+            if v.primary.model.isEmpty { v.primary.model = st.defaultModel(v.primary.provider) }
+            if let b = v.backup, b.model.isEmpty { v.backup?.model = st.defaultModel(b.provider) }
+            clean[st] = v
+        }
+        stages = clean
     }
 
-    /// Modelo de planejamento de cada IA (cai no de análise se estiver vazio).
-    func plannerModel(_ kind: ProviderKind) -> String {
-        let m = kind == .gemini ? geminiPlannerModel : openaiPlannerModel
-        return m.isEmpty ? (kind == .gemini ? geminiTextModel : openaiTextModel) : m
+    func stage(_ st: AIStage) -> StageAI { stages[st] ?? st.defaultAI }
+
+    /// Ordem de tentativa da etapa: principal e depois a reserva (sem repetir).
+    /// `prefer`: plataforma escolhida no lote ou em "Refazer com…". Se não for a principal, ela vai na frente
+    /// (com o modelo configurado para ela nesta etapa, ou o padrão da plataforma) e a principal vira a reserva.
+    func chain(_ st: AIStage, prefer: ProviderKind? = nil) -> [ModelChoice] {
+        let s = stage(st)
+        var list = [s.primary] + (s.backup.map { [$0] } ?? [])
+        if let p = prefer, list.first?.provider != p {
+            if let i = list.firstIndex(where: { $0.provider == p }) {
+                list.insert(list.remove(at: i), at: 0)
+            } else {
+                list.insert(ModelChoice(provider: p, model: st.defaultModel(p)), at: 0)
+            }
+        }
+        var seen = Set<ModelChoice>()
+        return Array(list.filter { seen.insert($0).inserted }.prefix(2))
     }
 }
 
 enum ProviderFactory {
-    /// Mesma IA, mas com o modelo de planejamento (mais forte) no lugar do de análise.
-    static func makePlanner(_ kind: ProviderKind, config: ProviderConfig) throws -> AIProvider {
-        var c = config
-        if kind == .gemini { c.geminiTextModel = config.plannerModel(.gemini) }
-        else { c.openaiTextModel = config.plannerModel(.openai) }
-        return try make(kind, config: c)
-    }
-
-    static func make(_ kind: ProviderKind, config: ProviderConfig) throws -> AIProvider {
-        guard let key = APIKeyStore.load(kind) else {
-            throw AIError("Chave do \(kind.label) não configurada. Vá em Configurações → Chaves de API.")
+    /// Cria o provedor da plataforma com o modelo escolhido (o mesmo nome serve para imagem ou texto;
+    /// cada etapa só usa a função do seu tipo).
+    static func make(_ choice: ModelChoice, config: ProviderConfig) throws -> AIProvider {
+        guard let key = APIKeyStore.load(choice.provider) else {
+            throw AIError("Chave do \(choice.provider.label) não configurada. Vá em Configurações → Chaves de API.", kind: .auth)
         }
-        switch kind {
+        switch choice.provider {
         case .gemini:
-            return GeminiProvider(apiKey: key, imageModel: config.geminiImageModel,
-                                  textModel: config.geminiTextModel, imageSize: config.geminiImageSize)
+            return GeminiProvider(apiKey: key, imageModel: choice.model,
+                                  textModel: choice.model, imageSize: config.geminiImageSize)
         case .openai:
-            return OpenAIProvider(apiKey: key, imageModel: config.openaiImageModel,
-                                  textModel: config.openaiTextModel, quality: config.openaiQuality)
+            return OpenAIProvider(apiKey: key, imageModel: choice.model,
+                                  textModel: choice.model, quality: config.openaiQuality)
         }
     }
 }

@@ -11,9 +11,9 @@ final class JobRunner: ObservableObject {
     private let settings: AppSettings
     private var tasks: [UUID: Task<Void, Never>] = [:]
     /// 1.0.0-beta.8: imagens bloqueadas pelo filtro de conteúdo, por lote e por IA (disjuntor).
-    private var imageBlocks: [UUID: [ProviderKind: Int]] = [:]
+    private var imageBlocks: [UUID: [ModelChoice: Int]] = [:]
     /// 1.0.0-beta.8: até quando o modelo de planejamento de cada IA fica "em pausa" depois de um 503/429.
-    private var plannerCooldown: [ProviderKind: Date] = [:]
+    private var plannerCooldown: [ModelChoice: Date] = [:]
 
     /// Depois de quantos bloqueios de imagem no mesmo lote a IA deixa de ser tentada nas próximas imagens dele.
     static let imageBlockLimit = 2
@@ -22,7 +22,7 @@ final class JobRunner: ObservableObject {
     /// Quanto tempo o modelo de planejamento sobrecarregado fica de lado.
     static let plannerCooldownSeconds: TimeInterval = 5 * 60
     /// 1.0.0-beta.9: até quando o modelo de análise de cada IA fica de lado depois de travar (tempo esgotado, 503, 429).
-    private var analysisCooldown: [ProviderKind: Date] = [:]
+    private var analysisCooldown: [ModelChoice: Date] = [:]
     /// Tentativas da análise/checagem na IA principal quando há outra de reserva (em vez das 6 do lote).
     static let analysisQuickAttempts = 2
     /// Tentativas da análise/checagem na IA de reserva (a checagem é auxiliar; não vale esperar muito).
@@ -42,10 +42,11 @@ final class JobRunner: ObservableObject {
         var enabled: Bool
         var onBlocked: Bool
 
+        /// 1.0.0-beta.11: com uma reserva escolhida por etapa, qualquer erro troca para ela
+        /// (modelo inexistente, chave, pedido recusado…); bloqueio de conteúdo só se a opção estiver ligada.
         func applies(to error: Error) -> Bool {
             guard enabled else { return false }
-            let kind = error.aiKind
-            return kind.isTemporary || (onBlocked && kind == .blocked)
+            return error.aiKind == .blocked ? onBlocked : true
         }
     }
 
@@ -58,7 +59,7 @@ final class JobRunner: ObservableObject {
         AppLog.info(.lote, wasStarted ? "Lote retomado." : "Lote iniciado.",
                     details: """
                     \(job.items.count) criativos · \(job.variationsPerItem) variações cada · saída \(job.sizeMode.label) \(job.format.label)
-                    Limpeza: \(job.cleanProvider.label) · Variações: \(job.variationProvider.label) · Análise: \(job.analysisProvider.label)
+                    IA do lote — limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · análise: \(job.analysisProvider.label)
                     \(settings.summary)
                     """,
                     jobID: jobID, jobName: job.name)
@@ -187,21 +188,13 @@ final class JobRunner: ObservableObject {
         let config = ProviderConfig(settings)
         await ProviderGate.configure(imageLimit: settings.maxImageRequests)
 
-        // provedores escolhidos no lote são obrigatórios; o outro entra como reserva se tiver chave
-        var providers: [ProviderKind: AIProvider] = [:]
-        var planners: [ProviderKind: AIProvider] = [:]
-        let required = Set([job.cleanProvider, job.variationProvider, job.analysisProvider])
-        for kind in ProviderKind.allCases {
-            do {
-                providers[kind] = try ProviderFactory.make(kind, config: config)
-                planners[kind] = try ProviderFactory.makePlanner(kind, config: config)
-            }
-            catch {
-                guard required.contains(kind) else { continue }
-                store.update(jobID) { $0.state = .paused; $0.lastError = error.localizedDescription }
-                AppLog.error(.lote, "Lote pausado: \(error.localizedDescription)", jobID: jobID, jobName: job.name)
-                return
-            }
+        // as plataformas escolhidas no lote são obrigatórias; a reserva de cada etapa só entra se tiver chave
+        let required = [job.cleanProvider, job.variationProvider, job.analysisProvider]
+        if let missing = required.first(where: { !APIKeyStore.hasKey($0) }) {
+            let msg = "Chave do \(missing.label) não configurada. Vá em Configurações → Chaves de API."
+            store.update(jobID) { $0.state = .paused; $0.lastError = msg }
+            AppLog.error(.lote, "Lote pausado: \(msg)", jobID: jobID, jobName: job.name)
+            return
         }
 
         // passos interrompidos no meio voltam para "pendente"
@@ -220,8 +213,6 @@ final class JobRunner: ObservableObject {
 
         imageBlocks[jobID] = [:]
         let workers = max(1, settings.maxConcurrent)
-        let available = providers
-        let availablePlanners = planners
         let rule = FallbackRule(enabled: settings.fallbackEnabled, onBlocked: settings.fallbackOnBlocked)
         let attempts = max(1, settings.retryAttempts)
 
@@ -236,8 +227,7 @@ final class JobRunner: ObservableObject {
                 for _ in 0..<min(workers, pending.count) {
                     group.addTask { @MainActor [weak self] in
                         while !Task.isCancelled, let id = queue.next() {
-                            await self?.process(jobID: jobID, itemID: id, providers: available, planners: availablePlanners,
-                                                config: config, rule: rule, attempts: attempts)
+                            await self?.process(jobID: jobID, itemID: id, config: config, rule: rule, attempts: attempts)
                         }
                     }
                 }
@@ -260,45 +250,48 @@ final class JobRunner: ObservableObject {
         }
     }
 
-    /// Chama a IA principal; se falhar por erro temporário (ou bloqueio, se ligado) e houver chave da outra, refaz com ela.
+    /// Chama a IA principal da etapa; se falhar (e a troca automática estiver ligada) e a reserva tiver chave, refaz com ela.
+    /// `chain`: principal e reserva da etapa (ProviderConfig.chain).
     /// - imageOp: pedido de imagem (limpeza/variação). Conta bloqueios do filtro de conteúdo por lote; depois de
-    ///   `imageBlockLimit` bloqueios da mesma IA, as próximas imagens do lote vão direto para a outra (1.0.0-beta.8).
+    ///   `imageBlockLimit` bloqueios do mesmo modelo, as próximas imagens do lote vão direto para a reserva (1.0.0-beta.8).
     /// - explicit: o usuário escolheu esta IA para esta etapa ("refazer com…"); o disjuntor não interfere.
-    /// - quickSwitch: análise/checagem (1.0.0-beta.9). Com a outra IA de reserva, desiste na 2ª falha temporária
+    /// - quickSwitch: análise/checagem (1.0.0-beta.9). Com reserva, desiste na 2ª falha temporária
     ///   (tempo esgotado, 503, 429) em vez das 6 tentativas, e deixa o modelo que travou de lado por 5 minutos.
-    private func withFallback<T>(_ primary: ProviderKind,
-                                 _ providers: [ProviderKind: AIProvider],
+    private func withFallback<T>(_ chain: [ModelChoice],
+                                 config: ProviderConfig,
                                  rule: FallbackRule,
                                  ctx: RequestContext,
                                  imageOp: Bool = false,
                                  explicit: Bool = false,
                                  quickSwitch: Bool = false,
-                                 _ op: (AIProvider) async throws -> T) async throws -> (T, ProviderKind) {
-        let other: (ProviderKind) -> ProviderKind = { $0 == .gemini ? .openai : .gemini }
+                                 _ op: (AIProvider) async throws -> T) async throws -> (T, ModelChoice) {
+        guard let primary = chain.first else { throw AIError("Nenhuma IA configurada para esta etapa.") }
+        let reserve: ModelChoice? = chain.dropFirst().first { APIKeyStore.hasKey($0.provider) }
+        let other: (ModelChoice) -> ModelChoice? = { c in
+            guard let reserve else { return nil }
+            return c == primary ? reserve : primary
+        }
         let blockedRule = rule.applies(to: AIError("", kind: .blocked))
         var first = primary
-        if imageOp, !explicit, blockedRule, providers[other(primary)] != nil, blockCount(ctx.jobID, primary) >= Self.imageBlockLimit {
-            first = other(primary)
-            ctx.onStatus?("Indo direto para \(first.label)…", nil)
+        if imageOp, !explicit, blockedRule, let r = reserve, blockCount(ctx.jobID, primary) >= Self.imageBlockLimit {
+            first = r
+            ctx.onStatus?("Indo direto para \(r.provider.label)…", nil)
         }
-        let canQuickSwitch = quickSwitch && rule.enabled && providers[other(primary)] != nil
-        if canQuickSwitch, let until = analysisCooldown[primary], until > Date() {
-            first = other(primary)
-        }
-        guard let main = providers[first] else {
-            throw AIError("Chave do \(first.label) não configurada. Vá em Configurações → Chaves de API.", kind: .auth)
+        let canQuickSwitch = quickSwitch && rule.enabled && reserve != nil
+        if canQuickSwitch, let r = reserve, let until = analysisCooldown[primary], until > Date() {
+            first = r
         }
         var firstCtx = ctx
         if first != primary { firstCtx.step = ctx.step + " (\(first.label))" }
         if canQuickSwitch { firstCtx.maxAttempts = min(ctx.maxAttempts, Self.analysisQuickAttempts) }
         do {
+            let main = try ProviderFactory.make(first, config: config)
             let value = try await RequestContext.$current.withValue(firstCtx) { try await op(main) }
             return (value, first)
         } catch {
             if error is CancellationError || Task.isCancelled { throw error }
-            if imageOp, error.aiKind == .blocked { registerBlock(first, ctx: ctx, canSwitch: blockedRule && providers[other(first)] != nil) }
-            let alt = other(first)
-            guard rule.applies(to: error), let backup = providers[alt] else { throw error }
+            if imageOp, error.aiKind == .blocked { registerBlock(first, reserve: other(first), ctx: ctx, canSwitch: blockedRule) }
+            guard rule.applies(to: error), let alt = other(first), let backup = try? ProviderFactory.make(alt, config: config) else { throw error }
             var cooldownNote = ""
             if canQuickSwitch, error.aiKind.isTemporary {
                 let wasCooling = (analysisCooldown[first] ?? .distantPast) > Date()
@@ -307,9 +300,9 @@ final class JobRunner: ObservableObject {
                     cooldownNote = " Nos próximos \(Int(Self.analysisCooldownSeconds / 60)) minutos, as análises e checagens vão direto para \(alt.label)."
                 }
             }
-            ctx.log(.warning, "\(first.label) falhou (\(error.aiKind.title)). Refazendo automaticamente com \(alt.label).\(cooldownNote)",
+            ctx.log(.warning, "\(first.label) falhou (\(error.aiKind.title)). Refazendo automaticamente com a reserva \(alt.label).\(cooldownNote)",
                     details: error.aiDetails ?? error.localizedDescription)
-            ctx.onStatus?("Trocando para \(alt.label)…", nil)
+            ctx.onStatus?("Trocando para \(alt.provider.label)…", nil)
             var altCtx = ctx
             altCtx.step = ctx.step + " (\(alt.label))"
             if canQuickSwitch { altCtx.maxAttempts = min(ctx.maxAttempts, Self.analysisBackupAttempts) }
@@ -318,20 +311,19 @@ final class JobRunner: ObservableObject {
         }
     }
 
-    private func blockCount(_ jobID: UUID?, _ kind: ProviderKind) -> Int {
+    private func blockCount(_ jobID: UUID?, _ choice: ModelChoice) -> Int {
         guard let jobID else { return 0 }
-        return imageBlocks[jobID]?[kind] ?? 0
+        return imageBlocks[jobID]?[choice] ?? 0
     }
 
     /// Conta um bloqueio de imagem; ao atingir o limite, avisa uma vez no Histórico.
-    private func registerBlock(_ kind: ProviderKind, ctx: RequestContext, canSwitch: Bool) {
+    private func registerBlock(_ choice: ModelChoice, reserve: ModelChoice?, ctx: RequestContext, canSwitch: Bool) {
         guard let jobID = ctx.jobID else { return }
-        let n = (imageBlocks[jobID]?[kind] ?? 0) + 1
-        imageBlocks[jobID, default: [:]][kind] = n
-        guard n == Self.imageBlockLimit, canSwitch else { return }
-        let alt: ProviderKind = kind == .gemini ? .openai : .gemini
-        AppLog.warning(.lote, "\(kind.label) bloqueou \(n) imagens neste lote. As próximas imagens deste lote vão direto para \(alt.label).",
-                       details: "Vale até o lote terminar ou ser pausado. \"Refazer com \(kind.label)\" continua disponível em cada imagem.",
+        let n = (imageBlocks[jobID]?[choice] ?? 0) + 1
+        imageBlocks[jobID, default: [:]][choice] = n
+        guard n == Self.imageBlockLimit, canSwitch, let reserve else { return }
+        AppLog.warning(.lote, "\(choice.label) bloqueou \(n) imagens neste lote. As próximas imagens deste lote vão direto para \(reserve.label).",
+                       details: "Vale até o lote terminar ou ser pausado. \"Refazer com \(choice.provider.label)\" continua disponível em cada imagem.",
                        jobID: jobID, jobName: ctx.jobName)
     }
 
@@ -348,66 +340,43 @@ final class JobRunner: ObservableObject {
     /// Quantas vezes o app refaz sozinho quando aparece termo proibido (limpeza e cada variação).
     static let autoRedoLimit = 1
 
-    /// Faz o plano com o modelo de planejamento; se o modelo não for aceito, usa o de análise;
-    /// se a IA falhar (e a troca automática estiver ligada), tenta a outra.
-    /// 1.0.0-beta.8: com outra IA de reserva, desiste na 2ª falha temporária (503/429) em vez de esperar as 6
-    /// tentativas, e deixa o modelo sobrecarregado de lado por 5 minutos (os próximos criativos já começam pela outra).
-    /// Se as duas estiverem sobrecarregadas, o último recurso é o modelo de análise da IA principal.
-    private func makePlan(_ jpeg: Data, prompt: String, primary: ProviderKind,
-                          planners: [ProviderKind: AIProvider], providers: [ProviderKind: AIProvider],
-                          config: ProviderConfig, rule: FallbackRule, ctx: RequestContext) async throws -> CreativePlan {
-        let alt: ProviderKind = primary == .gemini ? .openai : .gemini
-        let canSwitch = rule.enabled && planners[alt] != nil
-        var order: [ProviderKind] = [primary] + (canSwitch ? [alt] : [])
-        if canSwitch, let until = plannerCooldown[primary], until > Date() {
-            order = [alt, primary]
-            ctx.log(.info, "\(config.plannerModel(primary)) estava sobrecarregado há pouco; planejando com \(alt.label) (\(config.plannerModel(alt))).")
+    /// Faz o plano com a IA de planejamento escolhida; se falhar (e a troca automática estiver ligada), tenta a reserva.
+    /// 1.0.0-beta.8: com reserva, desiste na 2ª falha temporária (503/429) em vez de esperar as 6 tentativas,
+    /// e deixa o modelo sobrecarregado de lado por 5 minutos (os próximos criativos já começam pela reserva).
+    /// Último recurso: a IA principal da análise (mais leve, costuma ter folga).
+    private func makePlan(_ jpeg: Data, prompt: String, config: ProviderConfig, rule: FallbackRule,
+                          ctx: RequestContext) async throws -> CreativePlan {
+        let chain = config.chain(.planning).filter { APIKeyStore.hasKey($0.provider) }
+        var order = rule.enabled ? chain : Array(chain.prefix(1))
+        if order.count > 1, let until = plannerCooldown[order[0]], until > Date() {
+            order.swapAt(0, 1)
+            ctx.log(.info, "\(order[1].label) estava sobrecarregado há pouco; planejando com \(order[0].label).")
         }
-        var lastError: Error = AIError("Nenhuma IA disponível para o planejamento.")
-        for (i, kind) in order.enumerated() {
-            guard let planner = planners[kind] else { continue }
-            let model = config.plannerModel(kind)
+        if let basic = config.chain(.analysis).first(where: { APIKeyStore.hasKey($0.provider) }),
+           !order.contains(basic), rule.enabled || order.isEmpty {
+            order.append(basic)
+        }
+        var lastError: Error = AIError("Nenhuma IA com chave configurada para o planejamento.", kind: .auth)
+        for (i, choice) in order.enumerated() {
             if i > 0 {
-                ctx.log(.warning, "refazendo o planejamento com \(kind.label) (\(model)).", details: lastError.aiDetails ?? lastError.localizedDescription)
+                ctx.log(.warning, "refazendo o planejamento com \(choice.label).", details: lastError.aiDetails ?? lastError.localizedDescription)
             }
             var attemptCtx = ctx
             if i < order.count - 1 { attemptCtx.maxAttempts = min(ctx.maxAttempts, Self.plannerQuickAttempts) }
             do {
+                let planner = try ProviderFactory.make(choice, config: config)
                 let raw = try await RequestContext.$current.withValue(attemptCtx) { try await planner.analyze(jpeg, prompt: prompt) }
-                if let plan = CreativePlanner.parse(raw, model: model) { return plan }
-                lastError = AIError("O planejamento do \(kind.label) veio fora do formato esperado.", details: String(raw.prefix(600)))
+                if let plan = CreativePlanner.parse(raw, model: choice.model) { return plan }
+                lastError = AIError("O planejamento do \(choice.label) veio fora do formato esperado.", details: String(raw.prefix(600)))
             } catch {
                 if error is CancellationError || Task.isCancelled { throw error }
                 lastError = error
                 if error.aiKind == .temporary || error.aiKind == .rateLimit {
-                    plannerCooldown[kind] = Date().addingTimeInterval(Self.plannerCooldownSeconds)
-                    continue
+                    plannerCooldown[choice] = Date().addingTimeInterval(Self.plannerCooldownSeconds)
+                } else if error.aiKind == .model || error.aiKind == .badRequest {
+                    ctx.log(.warning, "o modelo \(choice.label) não foi aceito. Confira em Configurações → Modelos de IA.",
+                            details: error.aiDetails)
                 }
-                guard error.aiKind == .model || error.aiKind == .badRequest, let basic = providers[kind] else { continue }
-                let basicModel = kind == .gemini ? config.geminiTextModel : config.openaiTextModel
-                ctx.log(.warning, "o modelo de planejamento \(model) não foi aceito; usando \(basicModel). Confira o nome em Configurações → Modelos de IA.",
-                        details: error.aiDetails)
-                do {
-                    let raw = try await RequestContext.$current.withValue(ctx) { try await basic.analyze(jpeg, prompt: prompt) }
-                    if let plan = CreativePlanner.parse(raw, model: basicModel) { return plan }
-                    lastError = AIError("O planejamento veio fora do formato esperado.", details: String(raw.prefix(600)))
-                } catch {
-                    if error is CancellationError || Task.isCancelled { throw error }
-                    lastError = error
-                }
-            }
-        }
-        // último recurso em sobrecarga: o modelo de análise da IA principal (mais leve, costuma ter folga)
-        if lastError.aiKind.isTemporary, let basic = providers[primary] {
-            let basicModel = primary == .gemini ? config.geminiTextModel : config.openaiTextModel
-            ctx.log(.warning, "modelos de planejamento sobrecarregados; planejando com \(basicModel).", details: lastError.aiDetails)
-            do {
-                let raw = try await RequestContext.$current.withValue(ctx) { try await basic.analyze(jpeg, prompt: prompt) }
-                if let plan = CreativePlanner.parse(raw, model: basicModel) { return plan }
-                lastError = AIError("O planejamento veio fora do formato esperado.", details: String(raw.prefix(600)))
-            } catch {
-                if error is CancellationError || Task.isCancelled { throw error }
-                lastError = error
             }
         }
         throw lastError
@@ -418,8 +387,7 @@ final class JobRunner: ObservableObject {
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
-    private func process(jobID: UUID, itemID: UUID, providers: [ProviderKind: AIProvider], planners: [ProviderKind: AIProvider],
-                         config: ProviderConfig, rule: FallbackRule, attempts: Int) async {
+    private func process(jobID: UUID, itemID: UUID, config: ProviderConfig, rule: FallbackRule, attempts: Int) async {
         guard let job = store.job(jobID), let first = job.items.first(where: { $0.id == itemID }) else { return }
         let folder = store.folder(for: jobID)
         let removeItems = job.effectiveRemoveItems
@@ -441,8 +409,7 @@ final class JobRunner: ObservableObject {
                         throw AIError("Não foi possível ler a imagem original.")
                     }
                     let prompt = CreativePlanner.prompt(removeItems: removeItems, extra: extra, instructions: job.instructions)
-                    let plan = try await makePlan(upload, prompt: prompt, primary: job.analysisProvider, planners: planners,
-                                                  providers: providers, config: config, rule: rule, ctx: ctx)
+                    let plan = try await makePlan(upload, prompt: prompt, config: config, rule: rule, ctx: ctx)
                     store.update(jobID) { $0.costUSD += self.settings.pricePlanning }
                     store.updateItem(jobID, itemID) { $0.plan = plan; $0.planDone = true; $0.cleanRetryNote = nil }
                     ctx.log(.info, "plano pronto em \(Self.elapsed(started)) · termos proibidos: "
@@ -520,14 +487,15 @@ final class JobRunner: ObservableObject {
                     prompt = Prompts.clean(removeItems: removeItems, extra: extra, textChanges: textChanges,
                                            forbidden: forbidden, redoNote: item.cleanRedoNote)
                 }
-                let primary = item.cleanProviderOverride ?? job.cleanProvider
-                let (result, used) = try await withFallback(primary, providers, rule: rule, ctx: ctx,
-                                                            imageOp: true, explicit: item.cleanProviderOverride != nil) {
+                let chain = config.chain(.clean, prefer: item.cleanProviderOverride ?? job.cleanProvider)
+                let (result, usedModel) = try await withFallback(chain, config: config, rule: rule, ctx: ctx,
+                                                                 imageOp: true, explicit: item.cleanProviderOverride != nil) {
                     try await $0.editImage(upload, prompt: prompt, aspectRatio: aspect)
                 }
                 let rel = "limpos/\(Self.short(itemID))-\(Self.short(UUID())).png"
                 Paths.ensure(folder.appendingPathComponent("limpos", isDirectory: true))
                 try ImageTools.saveGenerated(result, to: folder.appendingPathComponent(rel))
+                let used = usedModel.provider
                 store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: used) }
                 store.updateItem(jobID, itemID) {
                     $0.cleanedFile = rel
@@ -538,7 +506,7 @@ final class JobRunner: ObservableObject {
                     $0.cleanSkipped = false
                     $0.analysisDone = false
                 }
-                ctx.log(.success, "concluída com \(used.label) em \(Self.elapsed(started)).")
+                ctx.log(.success, "concluída com \(usedModel.label) em \(Self.elapsed(started)).")
             } catch is CancellationError {
                 store.updateItem(jobID, itemID) { $0.cleanStatus = .pending; $0.cleanRetryNote = nil; $0.cleanRetryAt = nil }
                 return
@@ -580,7 +548,8 @@ final class JobRunner: ObservableObject {
                 // com plano, o texto final já está decidido; a análise só confere e transcreve
                 let changesForAI = plan == nil ? textChanges : ""
                 let prompt = Prompts.analysis(removeItems: removeItems, textChanges: changesForAI, forbidden: forbidden)
-                let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: ctx, quickSwitch: true) {
+                let (raw, _) = try await withFallback(config.chain(.analysis, prefer: job.analysisProvider), config: config,
+                                                      rule: rule, ctx: ctx, quickSwitch: true) {
                     try await $0.analyze(jpeg, prompt: prompt)
                 }
                 store.update(jobID) { $0.costUSD += self.settings.priceAnalysis }
@@ -686,22 +655,25 @@ final class JobRunner: ObservableObject {
                 }
                 do {
                     let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
-                    let primary = v.providerOverride ?? job.variationProvider
+                    let chain = config.chain(.variation, prefer: v.providerOverride ?? job.variationProvider)
                     var autoNote: String?
                     var redosUsed = v.autoRedos ?? 0
                     var out = cleanedURL
                     var ocrLeftovers: [String] = []
-                    var used = primary
+                    var used = chain.first?.provider ?? job.variationProvider
+                    var usedLabel = chain.first?.label ?? used.label
 
                     while true {
                         let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
                                                        textChanges: textChanges, forbidden: forbidden, rules: rules,
                                                        redoNote: Self.joinNotes(v.redoNote, autoNote))
-                        let (result, provider) = try await withFallback(primary, providers, rule: rule, ctx: ctx,
-                                                                        imageOp: true, explicit: v.providerOverride != nil) {
+                        let (result, usedModel) = try await withFallback(chain, config: config, rule: rule, ctx: ctx,
+                                                                         imageOp: true, explicit: v.providerOverride != nil) {
                             try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
                         }
+                        let provider = usedModel.provider
                         used = provider
+                        usedLabel = usedModel.label
                         let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
                         Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
                         out = folder.appendingPathComponent(rel)
@@ -732,7 +704,7 @@ final class JobRunner: ObservableObject {
                         $0.retryAt = nil
                         $0.providerUsed = used
                     }
-                    ctx.log(.success, "gerada com \(used.label) em \(Self.elapsed(started)).")
+                    ctx.log(.success, "gerada com \(usedLabel) em \(Self.elapsed(started)).")
 
                     // 4. CHECAGEM DO TEXTO — 1.0.0-beta.9: roda junto com a próxima variação em vez de segurá-la.
                     // O criativo só termina quando todas as checagens terminam (o grupo espera).
@@ -742,8 +714,9 @@ final class JobRunner: ObservableObject {
                     group.addTask { @MainActor [weak self] in
                         await self?.checkText(jobID: jobID, itemID: itemID, varID: varID, index: index, file: finalOut,
                                               transcript: ready.transcript, removeItems: removeItems, forbidden: forbidden,
-                                              ocrLeftovers: leftovers, verify: job.verifyText, analysisProvider: job.analysisProvider,
-                                              providers: providers, rule: rule, ctx: ctx)
+                                              ocrLeftovers: leftovers, verify: job.verifyText,
+                                              analysisChain: config.chain(.analysis, prefer: job.analysisProvider),
+                                              config: config, rule: rule, ctx: ctx)
                     }
                 } catch is CancellationError {
                     store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
@@ -772,8 +745,8 @@ final class JobRunner: ObservableObject {
     /// É auxiliar: falha aqui não derruba a variação. 1.0.0-beta.9: roda em paralelo com a próxima variação.
     private func checkText(jobID: UUID, itemID: UUID, varID: UUID, index: Int, file: URL,
                            transcript: String?, removeItems: [String], forbidden: [String], ocrLeftovers: [String],
-                           verify: Bool, analysisProvider: ProviderKind,
-                           providers: [ProviderKind: AIProvider], rule: FallbackRule, ctx: RequestContext) async {
+                           verify: Bool, analysisChain: [ModelChoice],
+                           config: ProviderConfig, rule: FallbackRule, ctx: RequestContext) async {
         var checkCtx = ctx
         checkCtx.step = "Checagem de texto v\(index)"
         checkCtx.category = .analise
@@ -786,7 +759,7 @@ final class JobRunner: ObservableObject {
            let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(file) }).value {
             do {
                 let prompt = Prompts.textCheck(expected: transcript ?? "(no text)", removeItems: removeItems, forbidden: forbidden)
-                let (raw, _) = try await withFallback(analysisProvider, providers, rule: rule, ctx: checkCtx, quickSwitch: true) {
+                let (raw, _) = try await withFallback(analysisChain, config: config, rule: rule, ctx: checkCtx, quickSwitch: true) {
                     try await $0.analyze(jpeg, prompt: prompt)
                 }
                 store.update(jobID) { $0.costUSD += self.settings.priceAnalysis }

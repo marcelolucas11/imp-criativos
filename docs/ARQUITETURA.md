@@ -60,7 +60,12 @@ etapas interrompidas voltam para "pendente".
 | Limpeza e variações | `gemini-nano-banana-2.1` via `POST /v1beta/interactions` | `gpt-image-2` via `POST /v1/images/edits` |
 | Análise e checagens | `gemini-3.5-flash-lite` via Interactions | `gpt-5-mini` via `POST /v1/chat/completions` |
 
-Os nomes dos modelos são editáveis nas Configurações. O tamanho de saída é sempre um formato vertical do Meta Ads
+Desde a beta.11, cada etapa (limpeza, variações, análise/checagem, planejamento) tem **IA principal** e **reserva**, cada
+uma escolhida como plataforma › modelo em Configurações → Modelos de IA (`AppSettings.stageAI`, tipos em
+`Models/AIModels.swift`). A lista de modelos junta os padrões do app e os que a chave enxerga na API
+(`GET /v1beta/models` no Gemini, `GET /v1/models` na OpenAI, filtrados por tipo em `ModelCatalog`), e aceita um nome
+digitado. A IA escolhida no Novo lote vira a principal da etapa; "Refazer com…" põe a plataforma escolhida na frente
+(`ProviderConfig.chain`). O tamanho de saída é sempre um formato vertical do Meta Ads
 (1080×1350 em 4:5 ou 1080×1920 em 9:16), e a IA já gera nessa proporção: no Gemini, `aspect_ratio` 4:5 ou 9:16 com
 `image_size` fixo em 2K e saída `image/jpeg` (o modelo não aceita PNG; o app converte para PNG ao salvar; se o modelo
 recusar algum campo, repete sem eles); na OpenAI, `size` 1024x1536 (retrato, com
@@ -75,8 +80,9 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
 - **Fila por IA** (`ProviderGate`): limita pedidos simultâneos de imagem por provedor somando todos os lotes (padrão 2;
   análise 4). Quando a IA responde 429/5xx, a fila daquela IA pausa por alguns segundos para os outros pedidos não
   insistirem juntos.
-- **Troca automática** (`JobRunner.withFallback`): se a IA do lote falhar por erro temporário (ou bloqueio, se ligado) e a
-  outra tiver chave, a etapa é refeita nela. O item guarda `providerUsed` e a tela mostra "feito com …".
+- **Troca automática** (`JobRunner.withFallback`): se a IA principal da etapa falhar (qualquer erro; bloqueio só se a
+  opção estiver ligada) e a reserva escolhida tiver chave, a etapa é refeita nela (beta.11; antes era sempre "a outra"
+  plataforma e só em erro temporário). O item guarda `providerUsed` e a tela mostra "feito com …".
 - **Filtro de conteúdo** (beta.5): o Gemini recebe `safety_settings` com `off` em todas as categorias ajustáveis
   (`harassment`, `hate_speech`, `sexually_explicit`, `dangerous_content`, `jailbreak`); a OpenAI recebe
   `moderation=low`. Se o modelo recusar esses campos (400), repete sem eles. Quando a resposta vem bloqueada, o próprio
@@ -87,9 +93,9 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
 - **Disjuntor por lote** (beta.8, `JobRunner.registerBlock`): depois de 2 imagens bloqueadas pela mesma IA num lote, as
   próximas limpezas e variações daquele lote vão direto para a outra IA (se houver chave e a troca em bloqueio estiver
   ligada). Escolha manual ("refazer com…") não passa pelo disjuntor. A contagem zera quando o lote é retomado.
-- **Planejamento em sobrecarga** (beta.8, `JobRunner.makePlan`): com a outra IA disponível, o modelo de planejamento tem
+- **Planejamento em sobrecarga** (beta.8, `JobRunner.makePlan`): com reserva disponível, o modelo de planejamento tem
   só 2 tentativas antes de trocar; depois de um 503/429 ele fica 5 minutos de lado (os próximos criativos começam pela
-  outra). Se as duas estiverem sobrecarregadas, o último recurso é o modelo de análise da IA principal.
+  reserva). Se as duas falharem, o último recurso é a IA principal da análise.
 - **Limpeza pulada** (beta.8): o plano traz `needs_cleaning`. Quando é `false`, o original (com rotação aplicada) vira o
   "limpo" sem chamar a IA de imagem. A análise confere esse limpo; se achar marca ou termo proibido, o item ganha
   `forceClean` e a limpeza roda normalmente. "Refazer" na limpeza também força.

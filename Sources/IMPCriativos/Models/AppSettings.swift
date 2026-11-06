@@ -22,20 +22,11 @@ final class AppSettings: ObservableObject {
     /// Também troca de IA quando a imagem for bloqueada pelo filtro de conteúdo.
     @Published var fallbackOnBlocked: Bool { didSet { d.set(fallbackOnBlocked, forKey: "fallbackOnBlocked") } }
     @Published var defaultOutputFolder: String { didSet { d.set(defaultOutputFolder, forKey: "defaultOutputFolder") } }
-    @Published var defaultCleanProvider: ProviderKind { didSet { d.set(defaultCleanProvider.rawValue, forKey: "defaultCleanProvider") } }
-    @Published var defaultVariationProvider: ProviderKind { didSet { d.set(defaultVariationProvider.rawValue, forKey: "defaultVariationProvider") } }
-    @Published var defaultAnalysisProvider: ProviderKind { didSet { d.set(defaultAnalysisProvider.rawValue, forKey: "defaultAnalysisProvider") } }
     @Published var defaultFormat: MetaFormat { didSet { d.set(defaultFormat.rawValue, forKey: "defaultFormat") } }
 
-    // Modelos (editáveis: quando sair modelo novo, basta trocar o nome)
-    @Published var geminiImageModel: String { didSet { d.set(geminiImageModel, forKey: "geminiImageModel") } }
-    @Published var geminiTextModel: String { didSet { d.set(geminiTextModel, forKey: "geminiTextModel") } }
-    @Published var openaiImageModel: String { didSet { d.set(openaiImageModel, forKey: "openaiImageModel") } }
-    @Published var openaiTextModel: String { didSet { d.set(openaiTextModel, forKey: "openaiTextModel") } }
+    /// 1.0.0-beta.11: plataforma + modelo de cada etapa, com a reserva usada quando a principal falha.
+    @Published var stageAI: [AIStage: StageAI] { didSet { saveStageAI() } }
     @Published var openaiQuality: String { didSet { d.set(openaiQuality, forKey: "openaiQuality") } }
-    /// 1.0.0-beta.7: modelos mais fortes que leem o pedido e planejam cada criativo.
-    @Published var geminiPlannerModel: String { didSet { d.set(geminiPlannerModel, forKey: "geminiPlannerModel") } }
-    @Published var openaiPlannerModel: String { didSet { d.set(openaiPlannerModel, forKey: "openaiPlannerModel") } }
     /// Liga a etapa de planejamento (recomendado).
     @Published var planningEnabled: Bool { didSet { d.set(planningEnabled, forKey: "planningEnabled") } }
 
@@ -44,15 +35,6 @@ final class AppSettings: ObservableObject {
     @Published var priceOpenAIImage: Double { didSet { d.set(priceOpenAIImage, forKey: "priceOpenAIImage") } }
     @Published var priceAnalysis: Double { didSet { d.set(priceAnalysis, forKey: "priceAnalysis") } }
     @Published var pricePlanning: Double { didSet { d.set(pricePlanning, forKey: "pricePlanning") } }
-
-    static let defaultModels = (
-        geminiImage: "gemini-nano-banana-2.1",
-        geminiText: "gemini-3.5-flash-lite",
-        openaiImage: "gpt-image-2",
-        openaiText: "gpt-5-mini",
-        geminiPlanner: "gemini-4-argon",
-        openaiPlanner: "gpt-6-sol"
-    )
 
     init() {
         d.register(defaults: [
@@ -65,21 +47,11 @@ final class AppSettings: ObservableObject {
             "retryAttempts": 6,
             "fallbackEnabled": true,
             "fallbackOnBlocked": true,
-            // 1.0.0-beta.8: limpeza no GPT por padrão (o filtro de imagem do Gemini bloqueava quase todas)
-            "defaultCleanProvider": ProviderKind.openai.rawValue,
-            "defaultVariationProvider": ProviderKind.gemini.rawValue,
-            "defaultAnalysisProvider": ProviderKind.gemini.rawValue,
-            "geminiImageModel": Self.defaultModels.geminiImage,
-            "geminiTextModel": Self.defaultModels.geminiText,
             "defaultFormat": MetaFormat.feed.rawValue,
-            "openaiImageModel": Self.defaultModels.openaiImage,
-            "openaiTextModel": Self.defaultModels.openaiText,
             "openaiQuality": "medium",
             "priceGeminiImage": 0.07,
             "priceOpenAIImage": 0.06,
             "priceAnalysis": 0.002,
-            "geminiPlannerModel": Self.defaultModels.geminiPlanner,
-            "openaiPlannerModel": Self.defaultModels.openaiPlanner,
             "planningEnabled": true,
             "pricePlanning": 0.02,
         ])
@@ -96,33 +68,100 @@ final class AppSettings: ObservableObject {
         fallbackEnabled = d.bool(forKey: "fallbackEnabled")
         fallbackOnBlocked = d.bool(forKey: "fallbackOnBlocked")
         defaultOutputFolder = d.string(forKey: "defaultOutputFolder") ?? defaultOut
-        defaultCleanProvider = ProviderKind(rawValue: d.string(forKey: "defaultCleanProvider") ?? "") ?? .openai
-        defaultVariationProvider = ProviderKind(rawValue: d.string(forKey: "defaultVariationProvider") ?? "") ?? .gemini
-        defaultAnalysisProvider = ProviderKind(rawValue: d.string(forKey: "defaultAnalysisProvider") ?? "") ?? .gemini
         defaultFormat = MetaFormat(rawValue: d.string(forKey: "defaultFormat") ?? "") ?? .feed
-        geminiImageModel = d.string(forKey: "geminiImageModel") ?? Self.defaultModels.geminiImage
-        geminiTextModel = d.string(forKey: "geminiTextModel") ?? Self.defaultModels.geminiText
-        openaiImageModel = d.string(forKey: "openaiImageModel") ?? Self.defaultModels.openaiImage
-        openaiTextModel = d.string(forKey: "openaiTextModel") ?? Self.defaultModels.openaiText
         openaiQuality = d.string(forKey: "openaiQuality") ?? "medium"
         priceGeminiImage = d.double(forKey: "priceGeminiImage")
         priceOpenAIImage = d.double(forKey: "priceOpenAIImage")
         priceAnalysis = d.double(forKey: "priceAnalysis")
-        geminiPlannerModel = d.string(forKey: "geminiPlannerModel") ?? Self.defaultModels.geminiPlanner
-        openaiPlannerModel = d.string(forKey: "openaiPlannerModel") ?? Self.defaultModels.openaiPlanner
         planningEnabled = d.bool(forKey: "planningEnabled")
         pricePlanning = d.double(forKey: "pricePlanning")
+        stageAI = Self.loadStageAI(d)
+    }
 
-        // 1.0.0-beta.8 (uma vez só): quem vinha usando o Gemini na limpeza passa para o GPT, se tiver a chave.
-        // Depois disso, a escolha do Novo lote volta a ser lembrada normalmente.
-        if !d.bool(forKey: "migratedCleanProviderB8") {
-            d.set(true, forKey: "migratedCleanProviderB8")
-            if defaultCleanProvider == .gemini && APIKeyStore.hasKey(.openai) {
-                defaultCleanProvider = .openai
-                // dentro do init o didSet não roda, então grava aqui
-                d.set(ProviderKind.openai.rawValue, forKey: "defaultCleanProvider")
-            }
+    // MARK: IA por etapa
+
+    func stage(_ s: AIStage) -> StageAI { stageAI[s] ?? s.defaultAI }
+
+    /// Se o modelo escolhido era a reserva, a antiga principal passa a ser a reserva (as duas não ficam iguais).
+    func setPrimary(_ c: ModelChoice, for s: AIStage) {
+        var v = stage(s)
+        guard v.primary != c else { return }
+        if v.backup == c { v.backup = v.primary }
+        v.primary = c
+        stageAI[s] = v
+    }
+
+    /// Escolha feita no Novo lote. Se a plataforma nova era a da reserva, a antiga principal vira a reserva,
+    /// para a etapa continuar com uma reserva de outra plataforma.
+    func adoptForBatch(_ c: ModelChoice, for s: AIStage) {
+        var v = stage(s)
+        guard v.primary != c else { return }
+        if v.backup == c || (v.backup?.provider == c.provider && v.primary.provider != c.provider) { v.backup = v.primary }
+        v.primary = c
+        stageAI[s] = v
+    }
+
+    func setBackup(_ c: ModelChoice?, for s: AIStage) {
+        var v = stage(s)
+        v.backup = c
+        stageAI[s] = v
+    }
+
+    private static let stageKey = "stageAI"
+
+    private func saveStageAI() {
+        let raw = Dictionary(uniqueKeysWithValues: stageAI.map { ($0.key.rawValue, $0.value) })
+        if let data = try? JSONEncoder().encode(raw) { d.set(data, forKey: Self.stageKey) }
+    }
+
+    /// Lê a configuração por etapa. Na primeira abertura da beta.11, monta a partir das escolhas antigas
+    /// (IA de cada etapa no Novo lote + nomes de modelo por plataforma), com a outra plataforma de reserva.
+    private static func loadStageAI(_ d: UserDefaults) -> [AIStage: StageAI] {
+        if let data = d.data(forKey: stageKey),
+           let raw = try? JSONDecoder().decode([String: StageAI].self, from: data) {
+            var out: [AIStage: StageAI] = [:]
+            for (k, v) in raw { if let st = AIStage(rawValue: k) { out[st] = v } }
+            for st in AIStage.allCases where out[st] == nil { out[st] = st.defaultAI }
+            return out
         }
+
+        func old(_ key: String) -> String? {
+            d.string(forKey: key)?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        }
+        func provider(_ key: String, _ fallback: ProviderKind) -> ProviderKind {
+            ProviderKind(rawValue: d.string(forKey: key) ?? "") ?? fallback
+        }
+        func model(_ st: AIStage, _ p: ProviderKind) -> String {
+            let key: String
+            switch (st, p) {
+            case (.clean, .gemini), (.variation, .gemini): key = "geminiImageModel"
+            case (.clean, .openai), (.variation, .openai): key = "openaiImageModel"
+            case (.analysis, .gemini): key = "geminiTextModel"
+            case (.analysis, .openai): key = "openaiTextModel"
+            case (.planning, .gemini): key = "geminiPlannerModel"
+            case (.planning, .openai): key = "openaiPlannerModel"
+            }
+            return old(key) ?? st.defaultModel(p)
+        }
+        func build(_ st: AIStage, _ main: ProviderKind) -> StageAI {
+            let alt: ProviderKind = main == .gemini ? .openai : .gemini
+            return StageAI(primary: ModelChoice(provider: main, model: model(st, main)),
+                           backup: ModelChoice(provider: alt, model: model(st, alt)))
+        }
+        var clean = provider("defaultCleanProvider", .openai)
+        // quem vem de antes da beta.8 e ainda limpava no Gemini passa para o GPT (se tiver a chave)
+        if !d.bool(forKey: "migratedCleanProviderB8") && clean == .gemini && APIKeyStore.hasKey(.openai) { clean = .openai }
+        let analysis = provider("defaultAnalysisProvider", .gemini)
+        let out: [AIStage: StageAI] = [
+            .clean: build(.clean, clean),
+            .variation: build(.variation, provider("defaultVariationProvider", .gemini)),
+            .analysis: build(.analysis, analysis),
+            // antes, o planejamento seguia a IA de análise do lote
+            .planning: build(.planning, analysis),
+        ]
+        let raw = Dictionary(uniqueKeysWithValues: out.map { ($0.key.rawValue, $0.value) })
+        if let data = try? JSONEncoder().encode(raw) { d.set(data, forKey: stageKey) }
+        return out
     }
 
     func imagePrice(for p: ProviderKind) -> Double {
@@ -131,21 +170,24 @@ final class AppSettings: ObservableObject {
 
     /// Resumo da configuração para o histórico e o diagnóstico (sem chaves).
     var summary: String {
-        """
-        Modelos: Gemini imagem \(geminiImageModel), análise \(geminiTextModel) · OpenAI imagem \(openaiImageModel) (qualidade \(openaiQuality)), análise \(openaiTextModel)
-        Planejamento: \(planningEnabled ? "ligado (Gemini \(geminiPlannerModel) · OpenAI \(openaiPlannerModel))" : "desligado")
+        let stages = AIStage.allCases.map { st -> String in
+            let v = stage(st)
+            return "\(st.label): \(v.primary.label) → reserva \(v.backup?.label ?? "nenhuma")"
+        }.joined(separator: "\n")
+        return """
+        \(stages)
+        OpenAI qualidade \(openaiQuality) · Planejamento \(planningEnabled ? "ligado" : "desligado")
         Processamento: \(maxConcurrent) criativos por lote ao mesmo tempo · \(maxImageRequests) pedidos de imagem por IA · \(retryAttempts) tentativas em erro temporário
         Troca automática de IA: \(fallbackEnabled ? "ligada" : "desligada")\(fallbackEnabled ? (fallbackOnBlocked ? " (também em bloqueio de conteúdo)" : " (só em erro temporário)") : "")
         """
     }
 
     func resetModels() {
-        geminiImageModel = Self.defaultModels.geminiImage
-        geminiTextModel = Self.defaultModels.geminiText
-        openaiImageModel = Self.defaultModels.openaiImage
-        openaiTextModel = Self.defaultModels.openaiText
+        stageAI = Dictionary(uniqueKeysWithValues: AIStage.allCases.map { ($0, $0.defaultAI) })
         openaiQuality = "medium"
-        geminiPlannerModel = Self.defaultModels.geminiPlanner
-        openaiPlannerModel = Self.defaultModels.openaiPlanner
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

@@ -12,9 +12,10 @@ struct NewJobView: View {
     @State private var folder: URL?
     @State private var files: [URL] = []
     @State private var variations = 4
-    @State private var cleanProvider: ProviderKind = .gemini
-    @State private var variationProvider: ProviderKind = .gemini
-    @State private var analysisProvider: ProviderKind = .gemini
+    // 1.0.0-beta.11: plataforma + modelo de cada etapa (começa com o que está em Configurações → Modelos de IA)
+    @State private var cleanAI = AIStage.clean.defaultAI.primary
+    @State private var variationAI = AIStage.variation.defaultAI.primary
+    @State private var analysisAI = AIStage.analysis.defaultAI.primary
     @State private var metaFormat: MetaFormat = .feed
     @State private var format: OutputFormat = .jpg
     @State private var verifyText = true
@@ -31,6 +32,10 @@ struct NewJobView: View {
     @State private var directionText = ""
 
     private var client: ClientProfile? { clients.client(clientID) }
+
+    private var cleanProvider: ProviderKind { cleanAI.provider }
+    private var variationProvider: ProviderKind { variationAI.provider }
+    private var analysisProvider: ProviderKind { analysisAI.provider }
 
     private var missingKey: ProviderKind? {
         [cleanProvider, variationProvider, analysisProvider].first { !APIKeyStore.hasKey($0) }
@@ -107,14 +112,14 @@ struct NewJobView: View {
                         Stepper(value: $variations, in: 1...10) {
                             Text("Variações por criativo: **\(variations)**")
                         }
-                        Picker("IA da limpeza", selection: $cleanProvider) {
-                            ForEach(ProviderKind.allCases) { Text($0.label).tag($0) }
+                        LabeledContent("IA da limpeza") {
+                            ModelMenu(role: .image, selection: cleanAI) { if let c = $0 { cleanAI = c } }
                         }
-                        Picker("IA das variações", selection: $variationProvider) {
-                            ForEach(ProviderKind.allCases) { Text($0.label).tag($0) }
+                        LabeledContent("IA das variações") {
+                            ModelMenu(role: .image, selection: variationAI) { if let c = $0 { variationAI = c } }
                         }
-                        Picker("IA das checagens", selection: $analysisProvider) {
-                            ForEach(ProviderKind.allCases) { Text($0.label).tag($0) }
+                        LabeledContent("IA das checagens") {
+                            ModelMenu(role: .text, selection: analysisAI) { if let c = $0 { analysisAI = c } }
                         }
                         Toggle("Conferir o texto de cada variação", isOn: $verifyText)
                     }
@@ -178,9 +183,9 @@ struct NewJobView: View {
     private func loadDefaults() {
         guard !didLoadDefaults else { return }
         didLoadDefaults = true
-        cleanProvider = settings.defaultCleanProvider
-        variationProvider = settings.defaultVariationProvider
-        analysisProvider = settings.defaultAnalysisProvider
+        cleanAI = settings.stage(.clean).primary
+        variationAI = settings.stage(.variation).primary
+        analysisAI = settings.stage(.analysis).primary
         metaFormat = settings.defaultFormat
         if clientID == nil { clientID = clients.clients.first?.id }
         if let c = client { variations = max(1, c.defaultVariations) }
@@ -208,9 +213,10 @@ struct NewJobView: View {
                         details: "Cliente: \(client.name) · \(variations) variações · \(metaFormat.label) \(format.label) · checagem de texto: \(verifyText ? "sim" : "não")"
                             + (job.instructions.map { "\nInstruções: \($0.raw)\n\($0.summary)" } ?? ""),
                         jobID: job.id, jobName: job.name)
-            settings.defaultCleanProvider = cleanProvider
-            settings.defaultVariationProvider = variationProvider
-            settings.defaultAnalysisProvider = analysisProvider
+            // a escolha do lote vira a principal de cada etapa (a reserva continua a de Configurações)
+            settings.adoptForBatch(cleanAI, for: .clean)
+            settings.adoptForBatch(variationAI, for: .variation)
+            settings.adoptForBatch(analysisAI, for: .analysis)
             settings.defaultFormat = metaFormat
             runner.start(job.id)
             model.selection = .job(job.id)

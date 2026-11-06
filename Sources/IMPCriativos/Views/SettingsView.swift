@@ -4,6 +4,7 @@ import AppKit
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var updater: Updater
+    @ObservedObject private var catalog = ModelCatalog.shared
 
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginError: String?
@@ -92,21 +93,23 @@ struct SettingsView: View {
                         }
                         Toggle(isOn: $settings.fallbackEnabled) {
                             VStack(alignment: .leading) {
-                                Text("Trocar de IA automaticamente quando uma falhar")
-                                Text("Se o Gemini continuar ocupado, a imagem é refeita no GPT (e vice-versa). Precisa das duas chaves.")
+                                Text("Trocar para a reserva automaticamente quando a IA principal falhar")
+                                Text("A etapa é refeita com a reserva escolhida em Modelos de IA (erro, sobrecarga, modelo não encontrado…).")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         Toggle(isOn: $settings.fallbackOnBlocked) {
                             VStack(alignment: .leading) {
                                 Text("Trocar também quando a imagem for bloqueada pelo filtro de conteúdo")
-                                Text("Útil quando uma IA recusa o criativo e a outra aceita.")
+                                Text("Útil quando uma IA recusa o criativo e a reserva aceita.")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         .disabled(!settings.fallbackEnabled)
-                        if settings.fallbackEnabled && !(APIKeyStore.hasKey(.gemini) && APIKeyStore.hasKey(.openai)) {
-                            WarningLabel(text: "A troca automática só funciona com as chaves do Gemini e da OpenAI salvas.")
+                        if settings.fallbackEnabled && AIStage.allCases.contains(where: { st in
+                            settings.stage(st).backup.map { !APIKeyStore.hasKey($0.provider) } ?? false
+                        }) {
+                            WarningLabel(text: "Alguma reserva é de uma plataforma sem chave salva; nessa etapa não haverá troca.")
                         }
                     } header: {
                         Text("Erros e tentativas")
@@ -115,24 +118,38 @@ struct SettingsView: View {
                     }
 
                     Section {
-                        LabeledContent("Gemini — imagem") { TextField("", text: $settings.geminiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        LabeledContent("Gemini — análise") { TextField("", text: $settings.geminiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
+                        ForEach(AIStage.allCases) { st in
+                            StageAIRow(stage: st)
+                                .disabled(st == .planning && !settings.planningEnabled)
+                                .opacity(st == .planning && !settings.planningEnabled ? 0.5 : 1)
+                        }
+                        Toggle("Planejar cada criativo com IA mais forte (recomendado)", isOn: $settings.planningEnabled)
+                        Picker("OpenAI — qualidade da imagem", selection: $settings.openaiQuality) {
+                            Text("Baixa").tag("low"); Text("Média").tag("medium"); Text("Alta").tag("high")
+                        }
                         Picker("Formato do criativo", selection: $settings.defaultFormat) {
                             ForEach(MetaFormat.allCases) { Text($0.label).tag($0) }
                         }
-                        LabeledContent("OpenAI — imagem") { TextField("", text: $settings.openaiImageModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        LabeledContent("OpenAI — análise") { TextField("", text: $settings.openaiTextModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        Picker("OpenAI — qualidade", selection: $settings.openaiQuality) {
-                            Text("Baixa").tag("low"); Text("Média").tag("medium"); Text("Alta").tag("high")
+                        HStack(spacing: 10) {
+                            Button {
+                                Task { await catalog.refresh() }
+                            } label: {
+                                Label("Atualizar lista de modelos", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(catalog.refreshing)
+                            if catalog.refreshing {
+                                ProgressView().controlSize(.small)
+                            } else if let d = catalog.lastUpdated {
+                                Text("Atualizada \(d.short)").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Restaurar modelos padrão") { settings.resetModels() }
                         }
-                        Toggle("Planejar cada criativo com IA mais forte (recomendado)", isOn: $settings.planningEnabled)
-                        LabeledContent("Gemini — planejamento") { TextField("", text: $settings.geminiPlannerModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        LabeledContent("OpenAI — planejamento") { TextField("", text: $settings.openaiPlannerModel).labelsHidden().textFieldStyle(.roundedBorder).frame(width: 260) }
-                        Button("Restaurar modelos padrão") { settings.resetModels() }
+                        if let e = catalog.lastError { WarningLabel(text: e) }
                     } header: {
                         Text("Modelos de IA")
                     } footer: {
-                        Text("O planejamento lê o seu pedido e cada criativo antes da limpeza e escreve as instruções exatas para as outras etapas. Usa a mesma IA escolhida para a análise no lote. Quando o Google ou a OpenAI lançarem um modelo novo, troque o nome aqui sem esperar atualização do app.")
+                        Text("Clique no modelo para escolher a plataforma e a versão de cada etapa, e qual IA assume se ela der erro. A lista traz os modelos padrão do app e os que a sua chave enxerga em cada plataforma (\"Atualizar lista\"); para um modelo que ainda não aparece, use \"Digitar outro modelo…\". O planejamento também interpreta as instruções do lote.")
                     }
 
                     Section {
@@ -177,6 +194,7 @@ struct SettingsView: View {
             .frame(maxWidth: 820, alignment: .leading)
         }
         .onAppear { launchAtLogin = LoginItem.isEnabled }
+        .task { await catalog.refreshIfStale() }
     }
 }
 
@@ -265,6 +283,7 @@ struct APIKeyRow: View {
             AppLog.info(.configuracoes, "Chave do \(provider.label) salva.")
             status = "Chave salva neste Mac."
             ok = true
+            Task { await ModelCatalog.shared.refresh() }
         } catch {
             status = error.localizedDescription
             ok = false
@@ -277,7 +296,8 @@ struct APIKeyRow: View {
         testing = true
         defer { testing = false }
         do {
-            let p = try ProviderFactory.make(provider, config: ProviderConfig(settings))
+            let p = try ProviderFactory.make(ModelChoice(provider: provider, model: AIStage.analysis.defaultModel(provider)),
+                                             config: ProviderConfig(settings))
             try await p.testKey()
             status = "Chave funcionando."
             ok = true
