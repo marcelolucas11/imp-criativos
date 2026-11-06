@@ -20,7 +20,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Chaves de API")
                     } footer: {
-                        Text("As chaves ficam no Keychain deste Mac. Nunca vão para o GitHub nem para outro lugar. Cada pessoa usa as próprias chaves.")
+                        Text("As chaves ficam salvas só neste Mac, num arquivo que apenas a sua conta do Mac consegue ler. Nunca vão para o GitHub nem para outro lugar. Cada pessoa usa as próprias chaves.")
                     }
 
                     Section("Comportamento") {
@@ -105,7 +105,7 @@ struct SettingsView: View {
                             }
                         }
                         .disabled(!settings.fallbackEnabled)
-                        if settings.fallbackEnabled && !(KeychainStore.hasKey(.gemini) && KeychainStore.hasKey(.openai)) {
+                        if settings.fallbackEnabled && !(APIKeyStore.hasKey(.gemini) && APIKeyStore.hasKey(.openai)) {
                             WarningLabel(text: "A troca automática só funciona com as chaves do Gemini e da OpenAI salvas.")
                         }
                     } header: {
@@ -230,7 +230,7 @@ struct APIKeyRow: View {
                 .disabled(!hasKey || testing)
                 if hasKey {
                     Button(role: .destructive) {
-                        KeychainStore.delete(provider)
+                        APIKeyStore.delete(provider)
                         AppLog.warning(.configuracoes, "Chave do \(provider.label) removida.")
                         refresh()
                         status = "Chave removida."
@@ -255,15 +255,15 @@ struct APIKeyRow: View {
         .onAppear(perform: refresh)
     }
 
-    private func refresh() { hasKey = KeychainStore.hasKey(provider) }
+    private func refresh() { hasKey = APIKeyStore.hasKey(provider) }
 
     private func save() {
         do {
-            try KeychainStore.save(value, for: provider)
+            try APIKeyStore.save(value, for: provider)
             value = ""
             refresh()
-            AppLog.info(.configuracoes, "Chave do \(provider.label) salva no Keychain.")
-            status = "Chave salva no Keychain."
+            AppLog.info(.configuracoes, "Chave do \(provider.label) salva.")
+            status = "Chave salva neste Mac."
             ok = true
         } catch {
             status = error.localizedDescription

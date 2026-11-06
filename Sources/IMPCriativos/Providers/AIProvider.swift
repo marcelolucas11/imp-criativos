@@ -52,7 +52,7 @@ enum ProviderFactory {
     }
 
     static func make(_ kind: ProviderKind, config: ProviderConfig) throws -> AIProvider {
-        guard let key = KeychainStore.load(kind) else {
+        guard let key = APIKeyStore.load(kind) else {
             throw AIError("Chave do \(kind.label) não configurada. Vá em Configurações → Chaves de API.")
         }
         switch kind {

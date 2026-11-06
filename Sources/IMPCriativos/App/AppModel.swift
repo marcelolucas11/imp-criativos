@@ -34,5 +34,5 @@ final class AppModel: ObservableObject {
         settings.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
     }
 
-    var missingKeys: Bool { !KeychainStore.hasKey(.gemini) && !KeychainStore.hasKey(.openai) }
+    var missingKeys: Bool { !APIKeyStore.hasKey(.gemini) && !APIKeyStore.hasKey(.openai) }
 }

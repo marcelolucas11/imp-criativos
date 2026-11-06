@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// Preferências do app, salvas no UserDefaults do Mac (as chaves de API ficam no Keychain, não aqui).
+/// Preferências do app, salvas no UserDefaults do Mac (as chaves de API ficam em chaves.json, não aqui).
 final class AppSettings: ObservableObject {
     private let d = UserDefaults.standard
 
@@ -117,7 +117,7 @@ final class AppSettings: ObservableObject {
         // Depois disso, a escolha do Novo lote volta a ser lembrada normalmente.
         if !d.bool(forKey: "migratedCleanProviderB8") {
             d.set(true, forKey: "migratedCleanProviderB8")
-            if defaultCleanProvider == .gemini && KeychainStore.hasKey(.openai) {
+            if defaultCleanProvider == .gemini && APIKeyStore.hasKey(.openai) {
                 defaultCleanProvider = .openai
                 // dentro do init o didSet não roda, então grava aqui
                 d.set(ProviderKind.openai.rawValue, forKey: "defaultCleanProvider")

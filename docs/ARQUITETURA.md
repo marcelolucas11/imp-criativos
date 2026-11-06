@@ -32,7 +32,7 @@ Pasta de criativos
 |---|---|
 | `App/` | Ciclo de vida, Dock ↔ barra de menus, confirmação ao sair, modelo central (`AppModel`) |
 | `Models/` | `Job`, `JobItem`, `Variation`, `ClientProfile`, `AppSettings` |
-| `Storage/` | Keychain, perfis de clientes (JSON), lotes (JSON + imagens), caminhos |
+| `Storage/` | Chaves de API (`chaves.json`), perfis de clientes (JSON), lotes (JSON + imagens), caminhos |
 | `Providers/` | Interface `AIProvider` e implementações Gemini (Interactions API) e OpenAI |
 | `Pipeline/` | `JobRunner` (fila e etapas), `Prompts`, `ImageTools`, `Exporter`, `CostEstimator` |
 | `System/` | Itens de Início (`SMAppService`), notificações, seletores de pasta |
@@ -43,7 +43,7 @@ Pasta de criativos
 
 | Dado | Local | No GitHub? |
 |---|---|---|
-| Chaves de API | Keychain (`com.imperaservices.impcriativos`) | Nunca |
+| Chaves de API | `~/Library/Application Support/IMP Criativos/chaves.json` (permissão 600, só o usuário lê) | Nunca |
 | Preferências | UserDefaults | Nunca |
 | Perfis de clientes | `~/Library/Application Support/IMP Criativos/clients/*.json` | Nunca |
 | Lotes | `…/jobs/<id>/job.json` + `originais/`, `limpos/`, `variacoes/` | Nunca |
@@ -133,10 +133,11 @@ de suporte.
 
 A v1 beta é assinada *ad-hoc* (sem conta de desenvolvedor Apple). Consequências:
 - Na primeira abertura é preciso "clique direito → Abrir".
-- Depois de cada atualização o macOS pode pedir para liberar o Keychain de novo ("Permitir Sempre").
+- Por isso as chaves **não** ficam no Keychain (desde a 1.0.0-beta.10): com assinatura ad-hoc, cada versão tem outra
+  identidade e o macOS pedia a senha das chaves de novo, às vezes sem parar.
 
 Próximo passo planejado: certificado autoassinado da agência guardado como segredo do GitHub, para manter a mesma
-identidade entre versões (sem novo pedido de Keychain e com verificação de origem no atualizador).
+identidade entre versões (com verificação de origem no atualizador).
 
 ## Publicação
 

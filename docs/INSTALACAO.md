@@ -21,9 +21,7 @@ Em **Configurações → Chaves de API**:
 | Gemini | [aistudio.google.com](https://aistudio.google.com) → Get API key |
 | OpenAI | [platform.openai.com](https://platform.openai.com) → API keys |
 
-Cole, clique em **Salvar** e depois em **Testar**. A chave fica no Keychain do Mac.
-
-Se depois de uma atualização o macOS perguntar se o IMP Criativos pode acessar o Keychain, clique em **Permitir Sempre**.
+Cole, clique em **Salvar** e depois em **Testar**. A chave fica salva só neste Mac, num arquivo que apenas a sua conta lê. O app não pede senha do Keychain.
 
 ## 3. Criar um cliente
 

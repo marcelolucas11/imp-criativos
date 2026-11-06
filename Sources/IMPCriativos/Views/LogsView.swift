@@ -345,7 +345,7 @@ struct LogsView: View {
             "=== Diagnóstico IMP Criativos ===",
             "Versão: \(AppInfo.version) (build \(AppInfo.build)) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
             "Gerado em: \(LogEntry.stamp.string(from: Date()))",
-            "Chaves: Gemini \(KeychainStore.hasKey(.gemini) ? "salva" : "não configurada") · OpenAI \(KeychainStore.hasKey(.openai) ? "salva" : "não configurada")",
+            "Chaves: Gemini \(APIKeyStore.hasKey(.gemini) ? "salva" : "não configurada") · OpenAI \(APIKeyStore.hasKey(.openai) ? "salva" : "não configurada")",
             settings.summary,
             "Filtro: \(filterDescription)",
             "",

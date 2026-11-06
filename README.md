@@ -46,7 +46,7 @@ O app baixa a versão nova daqui do GitHub, confere a integridade e se substitui
 
 ## Privacidade
 
-- **Chaves de API**: Keychain do seu Mac. Nunca saem dele (exceto para o próprio Google/OpenAI).
+- **Chaves de API**: arquivo `chaves.json` do app, legível só pela sua conta do Mac. Nunca saem dele (exceto para o próprio Google/OpenAI).
 - **Perfis de clientes, lotes e imagens**: `~/Library/Application Support/IMP Criativos/` e as pastas que você escolher.
 - **Este repositório** contém só código e prompts genéricos. Nenhum dado de cliente.
 

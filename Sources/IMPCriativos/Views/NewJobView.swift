@@ -33,7 +33,7 @@ struct NewJobView: View {
     private var client: ClientProfile? { clients.client(clientID) }
 
     private var missingKey: ProviderKind? {
-        [cleanProvider, variationProvider, analysisProvider].first { !KeychainStore.hasKey($0) }
+        [cleanProvider, variationProvider, analysisProvider].first { !APIKeyStore.hasKey($0) }
     }
 
     private var hasInstructions: Bool { !instructionsText.trimmed.isEmpty }

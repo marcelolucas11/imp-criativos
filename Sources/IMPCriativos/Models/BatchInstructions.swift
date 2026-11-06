@@ -81,7 +81,7 @@ enum InstructionInterpreter {
     @MainActor
     static func interpret(_ raw: String, preferred: ProviderKind, settings: AppSettings) async throws -> (BatchInstructions, ProviderKind) {
         let config = ProviderConfig(settings)
-        let order = [preferred] + ProviderKind.allCases.filter { $0 != preferred && KeychainStore.hasKey($0) }
+        let order = [preferred] + ProviderKind.allCases.filter { $0 != preferred && APIKeyStore.hasKey($0) }
         var lastError: Error = Failure(message: "Nenhuma chave de API configurada.")
         for kind in order {
             // 1.0.0-beta.7: usa o modelo de planejamento (mais forte); se não for aceito, o de análise

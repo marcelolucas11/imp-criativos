@@ -148,7 +148,7 @@ struct JobDetailView: View {
                         Divider()
                         ForEach(ProviderKind.allCases) { kind in
                             Button("Refazer falhas com \(kind.label)") { runner.retryFailed(jobID, using: kind) }
-                                .disabled(!KeychainStore.hasKey(kind))
+                                .disabled(!APIKeyStore.hasKey(kind))
                         }
                     }
                     Divider()
@@ -578,7 +578,7 @@ struct AltProviderButton: View {
     private var alt: ProviderKind { current == .gemini ? .openai : .gemini }
 
     var body: some View {
-        if KeychainStore.hasKey(alt) {
+        if APIKeyStore.hasKey(alt) {
             Button { redo(alt) } label: {
                 Label("Refazer com \(alt.label)", systemImage: "arrow.triangle.swap").font(.caption)
             }

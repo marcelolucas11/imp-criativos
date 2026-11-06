@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## [1.0.0-beta.10] — 2026-11-06
+
+**Fim do pedido de senha do Keychain**
+
+- **Corrigido: o macOS pedia a senha das chaves sem parar** ("IMP Criativos deseja acessar a chave…"), mesmo com a senha certa. O app é assinado sem conta de desenvolvedor Apple, então cada versão nova tem outra identidade e a liberação anterior não valia; e como as telas conferem a chave a todo momento, o pedido voltava em seguida.
+- **As chaves saíram do Keychain.** Agora ficam em `~/Library/Application Support/IMP Criativos/chaves.json`, com permissão só para a sua conta do Mac. Continuam sem ir para o GitHub nem para lugar nenhum além do Google/OpenAI.
+- **Migração automática e silenciosa:** na primeira abertura, o app tenta trazer as chaves antigas do Keychain sem mostrar nenhum pedido. Se o macOS não deixar, é só colar as chaves de novo em **Configurações → Chaves de API** (uma vez).
+
 ## [1.0.0-beta.9] — 2026-11-05
 
 **Nada de lote parado esperando uma IA que não responde (correções a partir do diagnóstico do "teste white v2")**
