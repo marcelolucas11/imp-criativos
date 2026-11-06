@@ -93,6 +93,16 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
 - **Limpeza pulada** (beta.8): o plano traz `needs_cleaning`. Quando é `false`, o original (com rotação aplicada) vira o
   "limpo" sem chamar a IA de imagem. A análise confere esse limpo; se achar marca ou termo proibido, o item ganha
   `forceClean` e a limpeza roda normalmente. "Refazer" na limpeza também força.
+- **Tempo máximo por tentativa** (beta.9, `HTTP.withDeadline`): cada tentativa do `HTTP.send` tem prazo próprio,
+  vindo de `RequestContext.timeout` (análise/checagem 90s, planejamento 240s, imagem 300s; sem contexto, imagem 300s e
+  texto 240s). Passou do prazo, o pedido é cancelado e vira erro `.timeout` ("Tempo esgotado"), que é temporário. A espera
+  pela vaga na fila da IA (`ProviderGate`) não conta no prazo. Pedido de texto acima de 45s é registrado no Histórico.
+- **Análise e checagem em travamento** (beta.9, `withFallback(quickSwitch:)`): com a outra IA disponível e a troca
+  automática ligada, a IA principal tem só 2 tentativas; na falha temporária, o modelo fica 5 minutos de lado
+  (`analysisCooldown`) e as próximas análises/checagens começam pela outra, que tem até 3 tentativas.
+- **Checagem em paralelo** (beta.9, `JobRunner.checkText`): as variações de um criativo rodam dentro de um
+  `withTaskGroup`; a checagem de cada variação entra como tarefa do grupo e corre junto com a próxima variação. O
+  criativo só termina quando o grupo termina, e cancelar o lote cancela as checagens em andamento.
 - **Contexto da chamada** (`RequestContext`, task-local): leva lote, criativo e etapa até o `HTTP.send`, que avisa a tela
   ("Gemini ocupado (503) · tentativa 3/6", com contagem regressiva) e registra no histórico.
 

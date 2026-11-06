@@ -2,16 +2,17 @@ import Foundation
 
 /// Tipo do erro: decide se vale tentar de novo, se cabe trocar de IA e o que mostrar na tela.
 enum AIErrorKind: String, Codable {
-    case temporary, rateLimit, network, blocked, auth, model, badRequest, other
+    case temporary, rateLimit, network, timeout, blocked, auth, model, badRequest, other
 
     /// Erros que costumam passar sozinhos: servidor ocupado, limite por minuto, internet.
-    var isTemporary: Bool { self == .temporary || self == .rateLimit || self == .network }
+    var isTemporary: Bool { self == .temporary || self == .rateLimit || self == .network || self == .timeout }
 
     var title: String {
         switch self {
         case .temporary: return "IA sobrecarregada (temporário)"
         case .rateLimit: return "Limite de uso atingido (temporário)"
         case .network: return "Falha de conexão (temporário)"
+        case .timeout: return "Tempo esgotado (temporário)"
         case .blocked: return "Bloqueado pelo filtro de conteúdo da IA"
         case .auth: return "Chave de API inválida ou sem permissão"
         case .model: return "Modelo não encontrado"
@@ -26,6 +27,7 @@ enum AIErrorKind: String, Codable {
         case .temporary: return "O servidor da IA estava cheio. Tente de novo em alguns minutos ou refaça com a outra IA."
         case .rateLimit: return "Sua conta atingiu o limite por minuto ou a cota. Espere um pouco, diminua os pedidos simultâneos ou confira o faturamento."
         case .network: return "Confira a internet do Mac e tente de novo."
+        case .timeout: return "A IA não respondeu dentro do tempo limite (servidor lento ou travado). Tente de novo ou refaça com a outra IA."
         case .blocked: return "A IA recusou a imagem ou o pedido. Refaça com a outra IA ou deixe a instrução do cliente mais neutra."
         case .auth: return "Confira a chave em Configurações → Chaves de API e use o botão Testar."
         case .model: return "Confira o nome do modelo em Configurações → Modelos de IA (ou restaure os padrões)."
@@ -88,6 +90,8 @@ struct RequestContext: Sendable {
     var step: String = ""
     var category: LogCategory = .ia
     var maxAttempts: Int = 6
+    /// 1.0.0-beta.9: tempo máximo de cada tentativa, em segundos (nil = padrão do tipo de pedido, ver `HTTP.defaultTimeout`).
+    var timeout: TimeInterval?
     /// Avisa a tela: (texto, até quando) — nil limpa o aviso.
     var onStatus: (@Sendable (String?, Date?) -> Void)?
 
@@ -99,7 +103,42 @@ struct RequestContext: Sendable {
     }
 }
 
+/// 1.0.0-beta.9: a tentativa passou do tempo máximo.
+struct DeadlineExceeded: Error {}
+
 enum HTTP {
+    /// 1.0.0-beta.9: tempos máximos por tentativa (antes, qualquer pedido podia esperar até 10 minutos).
+    static let analysisTimeout: TimeInterval = 90
+    static let plannerTimeout: TimeInterval = 240
+    static let imageTimeout: TimeInterval = 300
+    /// Pedido de texto que passa disso entra no Histórico com o tempo que levou.
+    static let slowTextSeconds: TimeInterval = 45
+
+    /// Sem tempo definido pelo lote: imagem 5 min, texto 4 min (cobre o planejamento e as instruções do lote), resto 2 min.
+    static func defaultTimeout(gate: ProviderGate?) -> TimeInterval {
+        guard let gate else { return 120 }
+        return gate.isImage ? imageTimeout : plannerTimeout
+    }
+
+    /// Roda `op` com prazo: passou de `seconds`, cancela o pedido e lança `DeadlineExceeded`.
+    static func withDeadline<T: Sendable>(_ seconds: TimeInterval, _ op: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await op() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw DeadlineExceeded()
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw CancellationError() }
+            return first
+        }
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds.rounded())
+        return s < 60 ? "\(s)s" : String(format: "%dmin %02ds", s / 60, s % 60)
+    }
+
     static let session: URLSession = {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 300
@@ -128,6 +167,10 @@ enum HTTP {
         let name = label.isEmpty ? (request.url?.host ?? "servidor") : label
         let shortName = name.components(separatedBy: " · ").first ?? name
         var lastError = AIError("Falha desconhecida")
+        let timeout = ctx?.timeout ?? defaultTimeout(gate: gate)
+        var timedRequest = request
+        timedRequest.timeoutInterval = timeout
+        let sendable = timedRequest
 
         for attempt in 1...maxAttempts {
             var retryAfter: Double?
@@ -140,7 +183,7 @@ enum HTTP {
                 }
                 let result: (Data, URLResponse)
                 do {
-                    result = try await session.data(for: request)
+                    result = try await withDeadline(timeout) { try await session.data(for: sendable) }
                     if let gate { await gate.release() }
                 } catch {
                     if let gate { await gate.release() }
@@ -151,6 +194,10 @@ enum HTTP {
                     throw AIError("Resposta inválida do servidor", kind: .network)
                 }
                 if (200..<300).contains(http.statusCode) {
+                    let took = Date().timeIntervalSince(started)
+                    if let gate, !gate.isImage, took > slowTextSeconds {
+                        ctx?.log(.info, "\(name) respondeu, mas demorou \(duration(took)).")
+                    }
                     if attempt > 1 {
                         ctx?.log(.success, "\(name) respondeu na tentativa \(attempt) de \(maxAttempts).")
                         ctx?.onStatus?(nil, nil)
@@ -181,7 +228,12 @@ enum HTTP {
             } catch is CancellationError {
                 throw CancellationError()
             } catch let e as URLError where e.code == .cancelled {
-                throw CancellationError()
+                if Task.isCancelled { throw CancellationError() }
+                lastError = timeoutError(name, request, attempt, maxAttempts, timeout, e)
+            } catch is DeadlineExceeded {
+                lastError = timeoutError(name, request, attempt, maxAttempts, timeout, nil)
+            } catch let e as URLError where e.code == .timedOut {
+                lastError = timeoutError(name, request, attempt, maxAttempts, timeout, e)
             } catch {
                 lastError = AIError("Erro de conexão: \(error.localizedDescription)", kind: .network,
                                     details: "\(name) · \(request.url?.host ?? "") · tentativa \(attempt)/\(maxAttempts)\n\(error)")
@@ -193,7 +245,8 @@ enum HTTP {
             ctx?.log(.warning,
                      "\(name): \(lastError.kind.title)\(code). Tentativa \(attempt) de \(maxAttempts); nova tentativa em \(Int(delay.rounded()))s.",
                      details: lastError.details)
-            ctx?.onStatus?("\(shortName) \(lastError.kind == .network ? "sem conexão" : "ocupado")\(code) · tentativa \(attempt + 1)/\(maxAttempts)",
+            let state = lastError.kind == .network ? "sem conexão" : lastError.kind == .timeout ? "não respondeu" : "ocupado"
+            ctx?.onStatus?("\(shortName) \(state)\(code) · tentativa \(attempt + 1)/\(maxAttempts)",
                            Date().addingTimeInterval(delay))
             try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
@@ -203,6 +256,13 @@ enum HTTP {
                           status: lastError.status, details: lastError.details)
         }
         throw lastError
+    }
+
+    private static func timeoutError(_ name: String, _ request: URLRequest, _ attempt: Int, _ maxAttempts: Int,
+                                     _ timeout: TimeInterval, _ underlying: Error?) -> AIError {
+        AIError("A IA não respondeu em \(duration(timeout))", kind: .timeout,
+                details: "\(name) · \(request.url?.host ?? "") · tentativa \(attempt)/\(maxAttempts) · limite \(duration(timeout))"
+                    + (underlying.map { "\n\($0)" } ?? ""))
     }
 
     static func apiErrorMessage(_ data: Data) -> String? {

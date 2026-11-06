@@ -21,6 +21,14 @@ final class JobRunner: ObservableObject {
     static let plannerQuickAttempts = 2
     /// Quanto tempo o modelo de planejamento sobrecarregado fica de lado.
     static let plannerCooldownSeconds: TimeInterval = 5 * 60
+    /// 1.0.0-beta.9: até quando o modelo de análise de cada IA fica de lado depois de travar (tempo esgotado, 503, 429).
+    private var analysisCooldown: [ProviderKind: Date] = [:]
+    /// Tentativas da análise/checagem na IA principal quando há outra de reserva (em vez das 6 do lote).
+    static let analysisQuickAttempts = 2
+    /// Tentativas da análise/checagem na IA de reserva (a checagem é auxiliar; não vale esperar muito).
+    static let analysisBackupAttempts = 3
+    /// Quanto tempo o modelo de análise que travou fica de lado.
+    static let analysisCooldownSeconds: TimeInterval = 5 * 60
 
     init(store: JobStore, settings: AppSettings) {
         self.store = store
@@ -256,12 +264,15 @@ final class JobRunner: ObservableObject {
     /// - imageOp: pedido de imagem (limpeza/variação). Conta bloqueios do filtro de conteúdo por lote; depois de
     ///   `imageBlockLimit` bloqueios da mesma IA, as próximas imagens do lote vão direto para a outra (1.0.0-beta.8).
     /// - explicit: o usuário escolheu esta IA para esta etapa ("refazer com…"); o disjuntor não interfere.
+    /// - quickSwitch: análise/checagem (1.0.0-beta.9). Com a outra IA de reserva, desiste na 2ª falha temporária
+    ///   (tempo esgotado, 503, 429) em vez das 6 tentativas, e deixa o modelo que travou de lado por 5 minutos.
     private func withFallback<T>(_ primary: ProviderKind,
                                  _ providers: [ProviderKind: AIProvider],
                                  rule: FallbackRule,
                                  ctx: RequestContext,
                                  imageOp: Bool = false,
                                  explicit: Bool = false,
+                                 quickSwitch: Bool = false,
                                  _ op: (AIProvider) async throws -> T) async throws -> (T, ProviderKind) {
         let other: (ProviderKind) -> ProviderKind = { $0 == .gemini ? .openai : .gemini }
         let blockedRule = rule.applies(to: AIError("", kind: .blocked))
@@ -270,11 +281,16 @@ final class JobRunner: ObservableObject {
             first = other(primary)
             ctx.onStatus?("Indo direto para \(first.label)…", nil)
         }
+        let canQuickSwitch = quickSwitch && rule.enabled && providers[other(primary)] != nil
+        if canQuickSwitch, let until = analysisCooldown[primary], until > Date() {
+            first = other(primary)
+        }
         guard let main = providers[first] else {
             throw AIError("Chave do \(first.label) não configurada. Vá em Configurações → Chaves de API.", kind: .auth)
         }
         var firstCtx = ctx
         if first != primary { firstCtx.step = ctx.step + " (\(first.label))" }
+        if canQuickSwitch { firstCtx.maxAttempts = min(ctx.maxAttempts, Self.analysisQuickAttempts) }
         do {
             let value = try await RequestContext.$current.withValue(firstCtx) { try await op(main) }
             return (value, first)
@@ -283,11 +299,20 @@ final class JobRunner: ObservableObject {
             if imageOp, error.aiKind == .blocked { registerBlock(first, ctx: ctx, canSwitch: blockedRule && providers[other(first)] != nil) }
             let alt = other(first)
             guard rule.applies(to: error), let backup = providers[alt] else { throw error }
-            ctx.log(.warning, "\(first.label) falhou (\(error.aiKind.title)). Refazendo automaticamente com \(alt.label).",
+            var cooldownNote = ""
+            if canQuickSwitch, error.aiKind.isTemporary {
+                let wasCooling = (analysisCooldown[first] ?? .distantPast) > Date()
+                analysisCooldown[first] = Date().addingTimeInterval(Self.analysisCooldownSeconds)
+                if !wasCooling && first == primary {
+                    cooldownNote = " Nos próximos \(Int(Self.analysisCooldownSeconds / 60)) minutos, as análises e checagens vão direto para \(alt.label)."
+                }
+            }
+            ctx.log(.warning, "\(first.label) falhou (\(error.aiKind.title)). Refazendo automaticamente com \(alt.label).\(cooldownNote)",
                     details: error.aiDetails ?? error.localizedDescription)
             ctx.onStatus?("Trocando para \(alt.label)…", nil)
             var altCtx = ctx
             altCtx.step = ctx.step + " (\(alt.label))"
+            if canQuickSwitch { altCtx.maxAttempts = min(ctx.maxAttempts, Self.analysisBackupAttempts) }
             let value = try await RequestContext.$current.withValue(altCtx) { try await op(backup) }
             return (value, alt)
         }
@@ -310,10 +335,14 @@ final class JobRunner: ObservableObject {
                        jobID: jobID, jobName: ctx.jobName)
     }
 
+    /// 1.0.0-beta.9: o tempo máximo de cada tentativa sai da etapa (análise 90s, imagem 5 min; o planejamento passa 4 min).
     private func context(_ job: Job, _ item: JobItem, step: String, category: LogCategory, attempts: Int,
+                         timeout: TimeInterval? = nil,
                          onStatus: (@Sendable (String?, Date?) -> Void)?) -> RequestContext {
         RequestContext(jobID: job.id, jobName: job.name, item: item.sourceName, step: step, category: category,
-                       maxAttempts: attempts, onStatus: onStatus)
+                       maxAttempts: attempts,
+                       timeout: timeout ?? (category == .analise ? HTTP.analysisTimeout : HTTP.imageTimeout),
+                       onStatus: onStatus)
     }
 
     /// Quantas vezes o app refaz sozinho quando aparece termo proibido (limpeza e cada variação).
@@ -403,7 +432,8 @@ final class JobRunner: ObservableObject {
         if first.planDone != true && first.cleanStatus != .done {
             if settings.planningEnabled {
                 store.updateItem(jobID, itemID) { $0.cleanStatus = .running; $0.cleanRetryNote = "Planejando o criativo…"; $0.cleanRetryAt = nil }
-                let ctx = context(job, first, step: "Planejamento", category: .analise, attempts: attempts, onStatus: nil)
+                let ctx = context(job, first, step: "Planejamento", category: .analise, attempts: attempts,
+                                  timeout: HTTP.plannerTimeout, onStatus: nil)
                 let started = Date()
                 do {
                     let src = folder.appendingPathComponent(first.originalFile)
@@ -550,7 +580,7 @@ final class JobRunner: ObservableObject {
                 // com plano, o texto final já está decidido; a análise só confere e transcreve
                 let changesForAI = plan == nil ? textChanges : ""
                 let prompt = Prompts.analysis(removeItems: removeItems, textChanges: changesForAI, forbidden: forbidden)
-                let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: ctx) {
+                let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: ctx, quickSwitch: true) {
                     try await $0.analyze(jpeg, prompt: prompt)
                 }
                 store.update(jobID) { $0.costUSD += self.settings.priceAnalysis }
@@ -639,123 +669,143 @@ final class JobRunner: ObservableObject {
         let aspect = Self.aspect(job.sizeMode, width: ready.pixelWidth, height: ready.pixelHeight)
         let rules = plan?.variationRules ?? ""
 
-        for v in ready.variations where v.status == .pending || v.status == .running {
-            if Task.isCancelled { return }
-            let varID = v.id
-            store.updateVariation(jobID, itemID, varID) { $0.status = .running; $0.attempts += 1; $0.retryNote = nil; $0.retryAt = nil }
-            let started = Date()
-            let ctx = context(job, ready, step: "Variação v\(v.index) (\(v.axisName))", category: .variacao, attempts: attempts) { [weak self] note, until in
-                Task { @MainActor in
-                    self?.store.updateVariation(jobID, itemID, varID) {
-                        guard $0.status == .running else { return }
-                        $0.retryNote = note
-                        $0.retryAt = until
-                    }
-                }
-            }
-            do {
-                let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
-                let primary = v.providerOverride ?? job.variationProvider
-                var autoNote: String?
-                var redosUsed = v.autoRedos ?? 0
-                var out = cleanedURL
-                var ocrLeftovers: [String] = []
-                var used = primary
-
-                while true {
-                    let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
-                                                   textChanges: textChanges, forbidden: forbidden, rules: rules,
-                                                   redoNote: Self.joinNotes(v.redoNote, autoNote))
-                    let (result, provider) = try await withFallback(primary, providers, rule: rule, ctx: ctx,
-                                                                    imageOp: true, explicit: v.providerOverride != nil) {
-                        try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
-                    }
-                    used = provider
-                    let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
-                    Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
-                    out = folder.appendingPathComponent(rel)
-                    try ImageTools.saveGenerated(result, to: out)
-                    store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: provider) }
-                    store.updateVariation(jobID, itemID, varID) { $0.file = rel }
-
-                    // leitura do próprio Mac: termo proibido → refaz sozinho uma vez
-                    let target = out
-                    let ocr = await Task.detached(operation: { LocalOCR.text(at: target) }).value ?? ""
-                    ocrLeftovers = ForbiddenTerms.found(in: ocr, terms: forbidden)
-                    guard !ocrLeftovers.isEmpty, redosUsed < Self.autoRedoLimit, !Task.isCancelled else { break }
-                    redosUsed += 1
-                    let redos = redosUsed
-                    store.updateVariation(jobID, itemID, varID) { $0.autoRedos = redos }
-                    autoNote = "Apareceu: \(ocrLeftovers.joined(separator: ", ")). Não escreva esses termos em nenhum lugar da imagem."
-                    ctx.log(.warning, "termo proibido apareceu (\(ocrLeftovers.joined(separator: ", "))). Refazendo automaticamente.",
-                            details: "Leitura do Mac:\n\(ocr)")
-                    ctx.onStatus?("Refazendo: termo proibido apareceu…", nil)
-                }
-
-                store.updateVariation(jobID, itemID, varID) {
-                    $0.status = .done
-                    $0.error = nil
-                    $0.errorKind = nil
-                    $0.errorDetails = nil
-                    $0.retryNote = nil
-                    $0.retryAt = nil
-                    $0.providerUsed = used
-                }
-                ctx.log(.success, "gerada com \(used.label) em \(Self.elapsed(started)).")
-
-                // 4. CHECAGEM DO TEXTO
-                var warnings: [String] = []
-                if !ocrLeftovers.isEmpty { warnings.append("Termo proibido: " + ocrLeftovers.joined(separator: ", ")) }
-                let finalOut = out
-                if job.verifyText, let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(finalOut) }).value,
-                   (ready.transcript?.isEmpty == false || !forbidden.isEmpty) {
-                    var checkCtx = ctx
-                    checkCtx.step = "Checagem de texto v\(v.index)"
-                    checkCtx.category = .analise
-                    checkCtx.onStatus = nil
-                    do {
-                        let prompt = Prompts.textCheck(expected: ready.transcript ?? "(no text)", removeItems: removeItems, forbidden: forbidden)
-                        let (raw, _) = try await withFallback(job.analysisProvider, providers, rule: rule, ctx: checkCtx) {
-                            try await $0.analyze(jpeg, prompt: prompt)
-                        }
-                        store.update(jobID) { $0.costUSD += self.settings.priceAnalysis }
-                        let obj = JSONExtract.object(from: raw) ?? [:]
-                        let match = (obj["match"] as? Bool) ?? true
-                        let diff = (obj["differences"] as? String) ?? ""
-                        let brand = (obj["brand_found"] as? [String]) ?? []
-                        if !match && ready.transcript?.isEmpty == false { warnings.append("Texto diferente: " + (diff.isEmpty ? "verifique" : diff)) }
-                        if !brand.isEmpty { warnings.append("Marca apareceu: " + brand.joined(separator: ", ")) }
-                    } catch {
-                        // checagem é auxiliar: falha aqui não derruba a variação
-                        if !(error is CancellationError) {
-                            checkCtx.log(.warning, "checagem não concluída (a variação foi mantida). \(error.localizedDescription)",
-                                         details: error.aiDetails)
+        await withTaskGroup(of: Void.self) { group in
+            for v in ready.variations where v.status == .pending || v.status == .running {
+                if Task.isCancelled { return }
+                let varID = v.id
+                store.updateVariation(jobID, itemID, varID) { $0.status = .running; $0.attempts += 1; $0.retryNote = nil; $0.retryAt = nil }
+                let started = Date()
+                let ctx = context(job, ready, step: "Variação v\(v.index) (\(v.axisName))", category: .variacao, attempts: attempts) { [weak self] note, until in
+                    Task { @MainActor in
+                        self?.store.updateVariation(jobID, itemID, varID) {
+                            guard $0.status == .running else { return }
+                            $0.retryNote = note
+                            $0.retryAt = until
                         }
                     }
                 }
-                let joined = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
-                store.updateVariation(jobID, itemID, varID) { $0.textWarning = joined }
-                if let joined { ctx.log(.warning, joined) }
-            } catch is CancellationError {
-                store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
-                return
-            } catch {
-                if Task.isCancelled {
+                do {
+                    let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
+                    let primary = v.providerOverride ?? job.variationProvider
+                    var autoNote: String?
+                    var redosUsed = v.autoRedos ?? 0
+                    var out = cleanedURL
+                    var ocrLeftovers: [String] = []
+                    var used = primary
+
+                    while true {
+                        let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
+                                                       textChanges: textChanges, forbidden: forbidden, rules: rules,
+                                                       redoNote: Self.joinNotes(v.redoNote, autoNote))
+                        let (result, provider) = try await withFallback(primary, providers, rule: rule, ctx: ctx,
+                                                                        imageOp: true, explicit: v.providerOverride != nil) {
+                            try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
+                        }
+                        used = provider
+                        let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
+                        Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
+                        out = folder.appendingPathComponent(rel)
+                        try ImageTools.saveGenerated(result, to: out)
+                        store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: provider) }
+                        store.updateVariation(jobID, itemID, varID) { $0.file = rel }
+
+                        // leitura do próprio Mac: termo proibido → refaz sozinho uma vez
+                        let target = out
+                        let ocr = await Task.detached(operation: { LocalOCR.text(at: target) }).value ?? ""
+                        ocrLeftovers = ForbiddenTerms.found(in: ocr, terms: forbidden)
+                        guard !ocrLeftovers.isEmpty, redosUsed < Self.autoRedoLimit, !Task.isCancelled else { break }
+                        redosUsed += 1
+                        let redos = redosUsed
+                        store.updateVariation(jobID, itemID, varID) { $0.autoRedos = redos }
+                        autoNote = "Apareceu: \(ocrLeftovers.joined(separator: ", ")). Não escreva esses termos em nenhum lugar da imagem."
+                        ctx.log(.warning, "termo proibido apareceu (\(ocrLeftovers.joined(separator: ", "))). Refazendo automaticamente.",
+                                details: "Leitura do Mac:\n\(ocr)")
+                        ctx.onStatus?("Refazendo: termo proibido apareceu…", nil)
+                    }
+
+                    store.updateVariation(jobID, itemID, varID) {
+                        $0.status = .done
+                        $0.error = nil
+                        $0.errorKind = nil
+                        $0.errorDetails = nil
+                        $0.retryNote = nil
+                        $0.retryAt = nil
+                        $0.providerUsed = used
+                    }
+                    ctx.log(.success, "gerada com \(used.label) em \(Self.elapsed(started)).")
+
+                    // 4. CHECAGEM DO TEXTO — 1.0.0-beta.9: roda junto com a próxima variação em vez de segurá-la.
+                    // O criativo só termina quando todas as checagens terminam (o grupo espera).
+                    let finalOut = out
+                    let leftovers = ocrLeftovers
+                    let index = v.index
+                    group.addTask { @MainActor [weak self] in
+                        await self?.checkText(jobID: jobID, itemID: itemID, varID: varID, index: index, file: finalOut,
+                                              transcript: ready.transcript, removeItems: removeItems, forbidden: forbidden,
+                                              ocrLeftovers: leftovers, verify: job.verifyText, analysisProvider: job.analysisProvider,
+                                              providers: providers, rule: rule, ctx: ctx)
+                    }
+                } catch is CancellationError {
                     store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
                     return
+                } catch {
+                    if Task.isCancelled {
+                        store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
+                        return
+                    }
+                    store.updateVariation(jobID, itemID, varID) {
+                        $0.status = .failed
+                        $0.error = error.localizedDescription
+                        $0.errorKind = error.aiKind
+                        $0.errorDetails = error.aiDetails
+                        $0.retryNote = nil
+                        $0.retryAt = nil
+                    }
+                    ctx.log(.error, "falhou — \(error.aiKind.title). \(error.localizedDescription)",
+                            details: [error.aiDetails, "Sugestão: \(error.aiKind.hint)"].compactMap { $0 }.joined(separator: "\n"))
                 }
-                store.updateVariation(jobID, itemID, varID) {
-                    $0.status = .failed
-                    $0.error = error.localizedDescription
-                    $0.errorKind = error.aiKind
-                    $0.errorDetails = error.aiDetails
-                    $0.retryNote = nil
-                    $0.retryAt = nil
-                }
-                ctx.log(.error, "falhou — \(error.aiKind.title). \(error.localizedDescription)",
-                        details: [error.aiDetails, "Sugestão: \(error.aiKind.hint)"].compactMap { $0 }.joined(separator: "\n"))
             }
         }
+    }
+
+    /// 4. CHECAGEM DO TEXTO de uma variação pronta: confere o texto travado e se apareceu marca.
+    /// É auxiliar: falha aqui não derruba a variação. 1.0.0-beta.9: roda em paralelo com a próxima variação.
+    private func checkText(jobID: UUID, itemID: UUID, varID: UUID, index: Int, file: URL,
+                           transcript: String?, removeItems: [String], forbidden: [String], ocrLeftovers: [String],
+                           verify: Bool, analysisProvider: ProviderKind,
+                           providers: [ProviderKind: AIProvider], rule: FallbackRule, ctx: RequestContext) async {
+        var checkCtx = ctx
+        checkCtx.step = "Checagem de texto v\(index)"
+        checkCtx.category = .analise
+        checkCtx.timeout = HTTP.analysisTimeout
+        checkCtx.onStatus = nil
+
+        var warnings: [String] = []
+        if !ocrLeftovers.isEmpty { warnings.append("Termo proibido: " + ocrLeftovers.joined(separator: ", ")) }
+        if verify, (transcript?.isEmpty == false || !forbidden.isEmpty),
+           let jpeg = await Task.detached(operation: { ImageTools.uploadJPEG(file) }).value {
+            do {
+                let prompt = Prompts.textCheck(expected: transcript ?? "(no text)", removeItems: removeItems, forbidden: forbidden)
+                let (raw, _) = try await withFallback(analysisProvider, providers, rule: rule, ctx: checkCtx, quickSwitch: true) {
+                    try await $0.analyze(jpeg, prompt: prompt)
+                }
+                store.update(jobID) { $0.costUSD += self.settings.priceAnalysis }
+                let obj = JSONExtract.object(from: raw) ?? [:]
+                let match = (obj["match"] as? Bool) ?? true
+                let diff = (obj["differences"] as? String) ?? ""
+                let brand = (obj["brand_found"] as? [String]) ?? []
+                if !match && transcript?.isEmpty == false { warnings.append("Texto diferente: " + (diff.isEmpty ? "verifique" : diff)) }
+                if !brand.isEmpty { warnings.append("Marca apareceu: " + brand.joined(separator: ", ")) }
+            } catch {
+                if error is CancellationError || Task.isCancelled { return }
+                checkCtx.log(.warning, "checagem não concluída (a variação foi mantida). \(error.localizedDescription)",
+                             details: error.aiDetails)
+            }
+        }
+        if Task.isCancelled { return }
+        let joined = warnings.isEmpty ? nil : warnings.joined(separator: " · ")
+        store.updateVariation(jobID, itemID, varID) { $0.textWarning = joined }
+        if let joined { checkCtx.log(.warning, joined) }
     }
 
     static func short(_ id: UUID) -> String { String(id.uuidString.prefix(8)).lowercased() }

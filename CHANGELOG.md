@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## [1.0.0-beta.9] — 2026-11-05
+
+**Nada de lote parado esperando uma IA que não responde (correções a partir do diagnóstico do "teste white v2")**
+
+- **Corrigido: uma checagem de texto podia segurar o criativo por até 1 hora.** Cada tentativa esperava até 10 minutos pela resposta, e a troca automática de IA só entrava depois das 6 tentativas. No "teste white v2", a checagem da v2 do hambúrguer ficou ~31 minutos parada. Agora cada tentativa tem um tempo máximo pela etapa: **análise e checagem 90s, planejamento 4 min, imagens 5 min**.
+- **A análise e a checagem trocam de IA rápido.** Com a outra chave configurada, elas desistem na 2ª falha temporária (tempo esgotado, 503 ou 429) e passam para a outra IA. O modelo que travou fica 5 minutos de lado, e as próximas análises e checagens já vão direto para a outra. Na IA de reserva, a checagem tenta no máximo 3 vezes.
+- **A checagem não segura mais as próximas variações.** A checagem da v2 roda junto com a geração da v3, e o criativo só fica pronto quando todas as checagens terminam.
+- **Novo erro "Tempo esgotado"**, separado de "Falha de conexão": quando a IA não responde dentro do tempo máximo.
+- **Histórico mais claro:** análise, checagem ou planejamento que passa de 45s ganha uma linha com o tempo que levou.
+
 ## [1.0.0-beta.8] — 2026-11-05
 
 **Lotes mais rápidos e previsíveis (correções a partir do diagnóstico do "teste white")**

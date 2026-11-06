@@ -5,6 +5,8 @@ import Foundation
 /// em vez de todos insistirem juntos.
 actor ProviderGate {
     let name: String
+    /// Fila de pedidos de imagem (define o tempo máximo padrão de cada pedido).
+    nonisolated var isImage: Bool { name.contains("imagem") }
     private var limit: Int
     private var inUse = 0
     private var pausedUntil = Date.distantPast
