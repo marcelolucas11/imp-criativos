@@ -27,9 +27,12 @@ struct ProviderConfig {
         for st in AIStage.allCases {
             var v = s.stage(st)
             v.primary.model = v.primary.model.trimmingCharacters(in: .whitespaces)
-            v.backup?.model = v.backup?.model.trimmingCharacters(in: .whitespaces) ?? ""
             if v.primary.model.isEmpty { v.primary.model = st.defaultModel(v.primary.provider) }
-            if let b = v.backup, b.model.isEmpty { v.backup?.model = st.defaultModel(b.provider) }
+            if var b = v.backup {
+                b.model = b.model.trimmingCharacters(in: .whitespaces)
+                if b.model.isEmpty { b.model = st.defaultModel(b.provider) }
+                v.backup = b
+            }
             clean[st] = v
         }
         stages = clean
