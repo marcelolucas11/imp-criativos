@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## [1.0.0-beta.12] — 2026-11-06
+
+**Todos os modelos já prontos no menu**
+
+- **Fim do "Digitar outro modelo…".** Cada plataforma agora mostra a lista completa de modelos que funcionam no app, mesmo sem a chave salva, cada um com uma nota curta (ex.: "mais fiel na edição", "o mais barato").
+- **Imagem (limpeza e variações):** Gemini — Nano Banana 2.1, Nano Banana Pro, Nano Banana 2, Nano Banana 2 Lite e o original; OpenAI — Images 2.6 e 2.5 (Sunburst e Flare), gpt-image-2 e os anteriores.
+- **Texto (planejamento, análise e checagem):** separados em "Mais fortes" (Gemini 4 Argon, 3.1 Pro, 3.8 Flash; GPT-6 Astra, 6.1 Sol, 6 Sol) e "Rápidos e baratos" (Flash, Flash-Lite; GPT-6.1 Terra, 6 Luna, minis), mais as versões anteriores.
+- Lançamentos que a sua chave enxergar e que ainda não estão na lista aparecem no fim do menu, em "Novos, vistos pela sua chave".
+- Os modelos padrão de cada etapa não mudaram.
+
 ## [1.0.0-beta.11] — 2026-11-06
 
 **Escolha de plataforma e modelo por etapa, com IA reserva**

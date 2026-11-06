@@ -11,24 +11,32 @@ struct ModelMenu: View {
     let onSelect: (ModelChoice?) -> Void
 
     @ObservedObject private var catalog = ModelCatalog.shared
-    @State private var customProvider: ProviderKind = .gemini
-    @State private var customName = ""
-    @State private var showCustom = false
+
+    private func item(_ p: ProviderKind, _ model: String, label: String) -> some View {
+        let choice = ModelChoice(provider: p, model: model)
+        return Toggle(label, isOn: Binding(get: { selection == choice }, set: { _ in onSelect(choice) }))
+    }
 
     var body: some View {
         Menu {
             ForEach(ProviderKind.allCases) { p in
                 Menu(p.platformLabel + (APIKeyStore.hasKey(p) ? "" : " — sem chave")) {
-                    let current = selection?.provider == p ? [selection?.model ?? ""] : []
-                    ForEach(catalog.models(p, role: role, including: current), id: \.self) { m in
-                        let choice = ModelChoice(provider: p, model: m)
-                        Toggle(m, isOn: Binding(get: { selection == choice }, set: { _ in onSelect(choice) }))
+                    // 1.0.0-beta.12: lista fixa com todos os modelos, agrupada; nada de digitar nome.
+                    let options = catalog.options(p, role: role)
+                    ForEach(ModelOption.Tier.allCases, id: \.self) { g in
+                        let inGroup = options.filter { $0.tier == g }
+                        if !inGroup.isEmpty {
+                            Section(g.title) {
+                                ForEach(inGroup, id: \.id) { o in item(p, o.id, label: o.menuLabel) }
+                            }
+                        }
                     }
-                    Divider()
-                    Button("Digitar outro modelo…") {
-                        customProvider = p
-                        customName = ""
-                        showCustom = true
+                    let extra = catalog.extraModels(p, role: role,
+                                                    current: selection?.provider == p ? selection?.model : nil)
+                    if !extra.isEmpty {
+                        Section("Novos, vistos pela sua chave") {
+                            ForEach(extra, id: \.self) { m in item(p, m, label: m) }
+                        }
                     }
                 }
             }
@@ -43,16 +51,6 @@ struct ModelMenu: View {
         }
         .frame(width: width)
         .help(selection?.label ?? noneLabel)
-        .alert("Outro modelo — \(customProvider.platformLabel)", isPresented: $showCustom) {
-            TextField("nome exato do modelo", text: $customName)
-            Button("Usar") {
-                let name = customName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty { onSelect(ModelChoice(provider: customProvider, model: name)) }
-            }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Use quando a plataforma lançar um modelo que ainda não aparece na lista. O nome precisa ser igual ao da documentação da API.")
-        }
     }
 }
 

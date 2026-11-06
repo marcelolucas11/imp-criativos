@@ -149,7 +149,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Modelos de IA")
                     } footer: {
-                        Text("Clique no modelo para escolher a plataforma e a versão de cada etapa, e qual IA assume se ela der erro. A lista traz os modelos padrão do app e os que a sua chave enxerga em cada plataforma (\"Atualizar lista\"); para um modelo que ainda não aparece, use \"Digitar outro modelo…\". O planejamento também interpreta as instruções do lote.")
+                        Text("Clique no modelo para escolher a plataforma e a versão de cada etapa, e qual IA assume se ela der erro. A lista já traz todos os modelos de cada plataforma que funcionam no app, mesmo sem chave; lançamentos novos que a sua chave enxergar aparecem no fim (\"Atualizar lista\"). O planejamento também interpreta as instruções do lote.")
                     }
 
                     Section {

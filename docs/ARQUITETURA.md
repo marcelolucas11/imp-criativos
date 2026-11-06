@@ -62,9 +62,10 @@ etapas interrompidas voltam para "pendente".
 
 Desde a beta.11, cada etapa (limpeza, variações, análise/checagem, planejamento) tem **IA principal** e **reserva**, cada
 uma escolhida como plataforma › modelo em Configurações → Modelos de IA (`AppSettings.stageAI`, tipos em
-`Models/AIModels.swift`). A lista de modelos junta os padrões do app e os que a chave enxerga na API
-(`GET /v1beta/models` no Gemini, `GET /v1/models` na OpenAI, filtrados por tipo em `ModelCatalog`), e aceita um nome
-digitado. A IA escolhida no Novo lote vira a principal da etapa; "Refazer com…" põe a plataforma escolhida na frente
+`Models/AIModels.swift`). Desde a beta.12 o menu mostra uma lista fixa com todos os modelos compatíveis de cada
+plataforma (`BuiltInModels`, agrupados em mais fortes / rápidos / atuais / anteriores), com ou sem chave, e não aceita
+mais nome digitado. Modelos que a chave enxerga na API (`GET /v1beta/models` no Gemini, `GET /v1/models` na OpenAI,
+filtrados por tipo em `ModelCatalog`) e que ainda não estão na lista fixa aparecem no fim, em "Novos". A IA escolhida no Novo lote vira a principal da etapa; "Refazer com…" põe a plataforma escolhida na frente
 (`ProviderConfig.chain`). O tamanho de saída é sempre um formato vertical do Meta Ads
 (1080×1350 em 4:5 ou 1080×1920 em 9:16), e a IA já gera nessa proporção: no Gemini, `aspect_ratio` 4:5 ou 9:16 com
 `image_size` fixo em 2K e saída `image/jpeg` (o modelo não aceita PNG; o app converte para PNG ao salvar; se o modelo
