@@ -20,6 +20,12 @@ struct CreativePlan: Codable, Hashable {
     var doubts: String
     /// Modelo que fez o plano (para o Histórico).
     var model: String?
+    /// 1.0.0-beta.8: false quando não há nada para apagar nem mudar nesta imagem; o app pula a limpeza
+    /// e usa o original. nil (planos antigos ou resposta sem o campo) conta como "precisa limpar".
+    var needsCleaning: Bool?
+
+    /// A limpeza só é pulada quando o plano diz explicitamente que não há nada a fazer.
+    var skipsCleaning: Bool { needsCleaning == false }
 }
 
 enum CreativePlanner {
@@ -74,10 +80,13 @@ enum CreativePlanner {
         - "variation_rules": English rules every variation must follow (user's direction and constraints, what must \
         never appear, what must stay faithful). Empty if nothing beyond the defaults.
         - "doubts": in Brazilian Portuguese, anything ambiguous you had to decide (empty string if none).
+        - "needs_cleaning": false ONLY when this image has nothing to erase or change at all: none of the requested \
+        elements or forbidden terms are visible, "final_text" is identical to "original_text", and no other edit was \
+        requested for this image. Otherwise true. When in doubt, true.
 
         Respond ONLY with JSON in this exact shape:
         {"forbidden_terms": ["..."], "original_text": "...", "final_text": "...", "clean_instruction": "...", \
-        "variation_rules": "...", "doubts": "..."}
+        "variation_rules": "...", "doubts": "...", "needs_cleaning": true or false}
         """
         return p
     }
@@ -95,7 +104,8 @@ enum CreativePlanner {
                                 cleanInstruction: clean,
                                 variationRules: ((obj["variation_rules"] as? String) ?? "").trimmed,
                                 doubts: ((obj["doubts"] as? String) ?? "").trimmed,
-                                model: model)
+                                model: model,
+                                needsCleaning: obj["needs_cleaning"] as? Bool)
         // Garantia: o texto final nunca carrega termo proibido, mesmo que a IA erre.
         if !ForbiddenTerms.found(in: plan.finalText, terms: plan.forbiddenTerms).isEmpty {
             plan.finalText = ForbiddenTerms.strip(plan.forbiddenTerms, from: plan.finalText)
@@ -112,6 +122,7 @@ enum CreativePlanner {
             "Instrução de limpeza:\n\(plan.cleanInstruction)",
         ]
         if !plan.variationRules.isEmpty { lines.append("Regras das variações:\n\(plan.variationRules)") }
+        if plan.skipsCleaning { lines.append("Limpeza: nada a remover nesta imagem (o app usa o original)") }
         if !plan.doubts.isEmpty { lines.append("Dúvidas resolvidas pela IA: \(plan.doubts)") }
         if let m = plan.model { lines.append("Modelo: \(m)") }
         return lines.joined(separator: "\n\n")

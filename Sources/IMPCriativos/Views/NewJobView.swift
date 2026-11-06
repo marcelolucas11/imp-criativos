@@ -75,6 +75,12 @@ struct NewJobView: View {
                         if let c = client {
                             Text("Remove \(c.removeItems.count) itens · \(c.axes.count) eixos de variação")
                                 .font(.caption).foregroundStyle(.secondary)
+                            if c.hasPlaceholderTerms {
+                                HStack {
+                                    WarningLabel(text: "Este cliente ainda tem os nomes de exemplo (\"Minha Empresa Prêmios\", @minhaempresa). Troque pelos nomes reais para a limpeza saber o que remover.")
+                                    Button("Editar cliente") { model.selection = .clients }
+                                }
+                            }
                         }
                     }
 

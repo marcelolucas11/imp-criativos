@@ -106,6 +106,13 @@ enum ImageTools {
         }
     }
 
+    /// 1.0.0-beta.8: copia o original como PNG (com a rotação EXIF aplicada) para servir de "limpo"
+    /// quando não há nada a remover. Devolve false se não conseguir ler ou gravar.
+    static func copyAsPNG(_ src: URL, to dst: URL) -> Bool {
+        guard let img = loadCGImage(src), let png = encode(img, as: .png) else { return false }
+        return (try? png.write(to: dst, options: .atomic)) != nil
+    }
+
     // MARK: miniaturas para as telas
 
     private static let cache = NSCache<NSString, NSImage>()

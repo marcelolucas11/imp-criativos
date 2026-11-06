@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## [1.0.0-beta.8] — 2026-11-05
+
+**Lotes mais rápidos e previsíveis (correções a partir do diagnóstico do "teste white")**
+
+- **Corrigido: todo pedido de imagem ao Gemini falhava na primeira tentativa.** O app pedia a saída em PNG e o modelo só devolve JPEG. Agora o pedido vai completo, e a imagem do Gemini volta em 9:16 (ou 4:5) e 2K, em vez de sair sem proporção.
+- **Limpeza pulada quando não há nada para remover.** O planejamento passa a dizer se a imagem precisa de limpeza. Se não precisar, o original segue direto para as variações, sem custo e sem risco de bloqueio. A checagem continua conferindo; se encontrar marca, a limpeza é feita normalmente. O criativo mostra "Nada a remover · usando o original", e "Refazer" limpa mesmo assim.
+- **Fim da tentativa neutra no bloqueio de imagem do Gemini.** Quando o filtro de imagem do Google barra o resultado (`image_safety`), o app passa direto para o GPT em vez de repetir no Gemini (nos testes, a repetição nunca funcionou e custava até 2 minutos).
+- **Disjuntor por lote:** depois de 2 imagens bloqueadas pela mesma IA num lote, as próximas imagens daquele lote vão direto para a outra. O Histórico avisa quando isso acontece.
+- **Limpeza no GPT por padrão.** Quem usava o Gemini na limpeza passa para o GPT uma vez (se tiver a chave da OpenAI). Dá para escolher o Gemini de novo no Novo lote.
+- **Planejamento troca de IA mais cedo em sobrecarga.** Com 2 erros 503/429 seguidos, o plano vai para a outra IA (antes eram 6 tentativas, mais de 3 minutos). O modelo sobrecarregado fica 5 minutos de lado, e os próximos criativos já começam pela outra IA. Sem a outra chave, o app usa o modelo de análise.
+- **Aviso no Novo lote** quando o cliente ainda tem os nomes de exemplo ("Minha Empresa Prêmios", @minhaempresa).
+
 ## [1.0.0-beta.7] — 2026-11-04
 
 **O app segue o seu pedido à risca**

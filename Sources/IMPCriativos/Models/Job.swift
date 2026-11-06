@@ -134,6 +134,12 @@ struct JobItem: Codable, Identifiable, Hashable {
     /// Quantas vezes o app refez a limpeza sozinho porque sobrou termo proibido.
     var autoCleanRedos: Int?
 
+    // 1.0.0-beta.8 (opcionais para abrir lotes antigos)
+    /// A limpeza foi pulada porque o plano disse que não havia nada a remover (o "limpo" é o original).
+    var cleanSkipped: Bool?
+    /// Obriga a limpeza mesmo que o plano diga que não precisa (checagem achou marca ou o usuário pediu para refazer).
+    var forceClean: Bool?
+
     var variations: [Variation]
 
     var baseName: String { (sourceName as NSString).deletingPathExtension }

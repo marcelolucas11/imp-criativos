@@ -65,7 +65,8 @@ final class AppSettings: ObservableObject {
             "retryAttempts": 6,
             "fallbackEnabled": true,
             "fallbackOnBlocked": true,
-            "defaultCleanProvider": ProviderKind.gemini.rawValue,
+            // 1.0.0-beta.8: limpeza no GPT por padrão (o filtro de imagem do Gemini bloqueava quase todas)
+            "defaultCleanProvider": ProviderKind.openai.rawValue,
             "defaultVariationProvider": ProviderKind.gemini.rawValue,
             "defaultAnalysisProvider": ProviderKind.gemini.rawValue,
             "geminiImageModel": Self.defaultModels.geminiImage,
@@ -95,7 +96,7 @@ final class AppSettings: ObservableObject {
         fallbackEnabled = d.bool(forKey: "fallbackEnabled")
         fallbackOnBlocked = d.bool(forKey: "fallbackOnBlocked")
         defaultOutputFolder = d.string(forKey: "defaultOutputFolder") ?? defaultOut
-        defaultCleanProvider = ProviderKind(rawValue: d.string(forKey: "defaultCleanProvider") ?? "") ?? .gemini
+        defaultCleanProvider = ProviderKind(rawValue: d.string(forKey: "defaultCleanProvider") ?? "") ?? .openai
         defaultVariationProvider = ProviderKind(rawValue: d.string(forKey: "defaultVariationProvider") ?? "") ?? .gemini
         defaultAnalysisProvider = ProviderKind(rawValue: d.string(forKey: "defaultAnalysisProvider") ?? "") ?? .gemini
         defaultFormat = MetaFormat(rawValue: d.string(forKey: "defaultFormat") ?? "") ?? .feed
@@ -111,6 +112,17 @@ final class AppSettings: ObservableObject {
         openaiPlannerModel = d.string(forKey: "openaiPlannerModel") ?? Self.defaultModels.openaiPlanner
         planningEnabled = d.bool(forKey: "planningEnabled")
         pricePlanning = d.double(forKey: "pricePlanning")
+
+        // 1.0.0-beta.8 (uma vez só): quem vinha usando o Gemini na limpeza passa para o GPT, se tiver a chave.
+        // Depois disso, a escolha do Novo lote volta a ser lembrada normalmente.
+        if !d.bool(forKey: "migratedCleanProviderB8") {
+            d.set(true, forKey: "migratedCleanProviderB8")
+            if defaultCleanProvider == .gemini && KeychainStore.hasKey(.openai) {
+                defaultCleanProvider = .openai
+                // dentro do init o didSet não roda, então grava aqui
+                d.set(ProviderKind.openai.rawValue, forKey: "defaultCleanProvider")
+            }
+        }
     }
 
     func imagePrice(for p: ProviderKind) -> Double {

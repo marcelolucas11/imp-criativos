@@ -19,8 +19,10 @@ struct GeminiProvider: AIProvider {
     func editImage(_ jpeg: Data, prompt: String, aspectRatio: String) async throws -> Data {
         do {
             return try await editOnce(jpeg, prompt: prompt, aspectRatio: aspectRatio)
-        } catch let e as AIError where e.kind == .blocked {
-            // Bloqueio por conteúdo: uma nova tentativa com a instrução reformulada em tom neutro.
+        } catch let e as AIError where e.kind == .blocked && !Self.isImageSafety(e) {
+            // Bloqueio do pedido (sem imagem na resposta): uma nova tentativa com a instrução em tom neutro.
+            // 1.0.0-beta.8: no bloqueio do filtro de IMAGEM (image_safety) não repete. A imagem já foi gerada
+            // e barrada na saída; nos testes a tentativa neutra nunca passou (0 de 7) e só atrasava a troca de IA.
             RequestContext.current?.log(.info, "Gemini bloqueou o pedido; tentando de novo com instrução neutra.", details: e.details)
             RequestContext.current?.onStatus?("Gemini bloqueou · tentando com instrução neutra…", nil)
             return try await editOnce(jpeg, prompt: Prompts.neutral(prompt), aspectRatio: aspectRatio)
@@ -32,9 +34,11 @@ struct GeminiProvider: AIProvider {
             ["type": "text", "text": prompt],
             ["type": "image", "mime_type": "image/jpeg", "data": jpeg.base64EncodedString()],
         ]
+        // 1.0.0-beta.8: o modelo de imagem só devolve JPEG; pedir PNG fazia todo primeiro pedido falhar (HTTP 400)
+        // e o app repetia sem proporção/resolução. O app converte para PNG ao salvar.
         let format: [String: Any] = [
             "type": "image",
-            "mime_type": "image/png",
+            "mime_type": "image/jpeg",
             "aspect_ratio": aspectRatio,
             "image_size": imageSize,
         ]
@@ -111,6 +115,12 @@ struct GeminiProvider: AIProvider {
         req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await HTTP.send(req, label: "Gemini · \(model)", gate: gate)
+    }
+
+    /// Bloqueio do filtro de saída de imagem do Google ("image_safety"), que não é ajustável.
+    static func isImageSafety(_ e: AIError) -> Bool {
+        let text = (e.message + " " + (e.details ?? "")).lowercased()
+        return text.contains("image_safety") || text.contains("image generation blocked")
     }
 
     /// Motivo de bloqueio quando o Gemini informa (finishReason / blockReason).

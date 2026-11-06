@@ -53,6 +53,15 @@ struct ClientProfile: Codable, Identifiable, Hashable {
                       extraInstructions: "")
     }
 
+    /// Nomes do perfil de exemplo, que precisam ser trocados pelos reais.
+    static let placeholderTerms = ["Minha Empresa Prêmios", "@minhaempresa"]
+
+    /// 1.0.0-beta.8: o perfil ainda tem os nomes de exemplo (instruções ou itens de remoção).
+    var hasPlaceholderTerms: Bool {
+        let text = (removeItems + [extraInstructions]).joined(separator: "\n").lowercased()
+        return Self.placeholderTerms.contains { text.contains($0.lowercased()) }
+    }
+
     static var example: ClientProfile {
         var p = newProfile(named: "Exemplo")
         p.extraInstructions = "Troque pelos nomes reais: ex. remover o nome \"Minha Empresa Prêmios\" e o @minhaempresa."

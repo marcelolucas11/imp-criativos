@@ -326,6 +326,11 @@ struct ItemCard: View {
                             if item.cleanStatus == .done, let used = item.cleanProviderUsed, used != job.cleanProvider {
                                 ProviderUsedLabel(provider: used)
                             }
+                            if item.cleanStatus == .done, item.cleanSkipped == true {
+                                Label("Nada a remover · usando o original", systemImage: "checkmark.seal")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .help("O plano não encontrou nada para apagar nesta imagem e a checagem confirmou. Use \"Refazer\" para limpar mesmo assim.")
+                            }
                             if let w = item.cleanWarning { WarningLabel(text: w) }
                             if item.cleanStatus == .done || item.cleanStatus == .failed {
                                 ReviewBar(review: item.cleanReview, canApprove: item.cleanStatus == .done,
