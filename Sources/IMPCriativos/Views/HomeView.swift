@@ -58,7 +58,7 @@ struct HomeView: View {
                     Card {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Nenhum lote ainda.").font(.headline)
-                            Text("Crie um cliente em Clientes (o que remover e como variar) e depois um Novo lote apontando para a pasta dos criativos.")
+                            Text("O app é feito para criativos de cassino online e apostas esportivas (bet). Crie um cliente em Clientes (o que remover e como variar) e depois um Novo lote apontando para a pasta dos criativos.")
                                 .foregroundStyle(.secondary)
                         }
                     }

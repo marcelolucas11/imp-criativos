@@ -105,8 +105,10 @@ final class JobStore: ObservableObject {
             let dst = originals.appendingPathComponent("\(String(format: "%03d", n + 1)).\(ext)")
             try FileManager.default.copyItem(at: src, to: dst)
             let size = ImageTools.pixelSize(of: dst) ?? CGSize(width: 1080, height: 1080)
+            // 1.0.0-beta.14: rodízio dos eixos entre os criativos do lote. Com 4 variações, o 1º criativo usa
+            // os eixos 1–4, o 2º os eixos 5–8… e no fim da lista recomeça. Antes, todo criativo usava só os N primeiros.
             let vars = (0..<variations).map { i -> Variation in
-                let axis = axes[i % axes.count]
+                let axis = axes[(n * variations + i) % axes.count]
                 return Variation(index: i + 1, axisName: axis.name, axisInstruction: axis.instruction)
             }
             items.append(JobItem(sourceName: src.lastPathComponent,

@@ -7,7 +7,7 @@ struct VariationAxis: Codable, Identifiable, Hashable {
     var instruction: String
 }
 
-/// Perfil de um cliente: o que remover, como variar e instruções extras.
+/// Perfil de um cliente (operador de cassino ou bet): o que remover, como variar e instruções extras.
 /// Fica salvo só no Mac do usuário (Application Support), nunca no repositório.
 struct ClientProfile: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -30,7 +30,11 @@ struct ClientProfile: Codable, Identifiable, Hashable {
         "Marca d'água ou selo da empresa",
     ]
 
-    static let defaultAxes: [VariationAxis] = [
+    // Os eixos padrão (50, de cassino e bet) ficam em DefaultAxes.swift, gerado junto com docs/EIXOS-DE-VARIACAO.md.
+
+    /// Eixos padrão da beta.1 à beta.13. Guardados só para reconhecer perfis que nunca mexeram neles
+    /// e trocá-los sozinhos pelos 50 eixos de cassino e bet (ver `ClientStore.migrateLegacyDefaults`).
+    static let legacyDefaultAxes: [VariationAxis] = [
         VariationAxis(name: "Fundo e paleta",
                       instruction: "Replace the background and the color palette with a fresh, vibrant combination. Keep high contrast and perfect legibility."),
         VariationAxis(name: "Composição",
@@ -45,6 +49,13 @@ struct ClientProfile: Codable, Identifiable, Hashable {
                       instruction: "Place the main subject in a different setting or environment that is coherent with the theme of the ad."),
     ]
 
+    /// true quando o perfil ainda usa exatamente os eixos padrão antigos (sem nenhuma edição).
+    var usesLegacyDefaultAxes: Bool {
+        guard axes.count == Self.legacyDefaultAxes.count else { return false }
+        let legacy = Set(Self.legacyDefaultAxes.map { "\($0.name)|\($0.instruction)" })
+        return Set(axes.map { "\($0.name)|\($0.instruction)" }) == legacy
+    }
+
     static func newProfile(named name: String = "Novo cliente") -> ClientProfile {
         ClientProfile(name: name,
                       removeItems: defaultRemoveItems,
@@ -54,7 +65,8 @@ struct ClientProfile: Codable, Identifiable, Hashable {
     }
 
     /// Nomes do perfil de exemplo, que precisam ser trocados pelos reais.
-    static let placeholderTerms = ["Minha Empresa Prêmios", "@minhaempresa"]
+    /// Os dois últimos são do exemplo antigo (até a beta.13), mantidos para reconhecer perfis criados antes.
+    static let placeholderTerms = ["Minha Bet", "@minhabet", "Minha Empresa Prêmios", "@minhaempresa"]
 
     /// 1.0.0-beta.8: o perfil ainda tem os nomes de exemplo (instruções ou itens de remoção).
     var hasPlaceholderTerms: Bool {
@@ -62,9 +74,13 @@ struct ClientProfile: Codable, Identifiable, Hashable {
         return Self.placeholderTerms.contains { text.contains($0.lowercased()) }
     }
 
+    static let exampleInstructions = "Troque pelos nomes reais da casa de apostas: ex. remover o nome \"Minha Bet\", o @minhabet e o site minhabet.bet.br."
+    /// Texto do perfil de exemplo até a beta.13 (trocado sozinho pelo novo).
+    static let legacyExampleInstructions = "Troque pelos nomes reais: ex. remover o nome \"Minha Empresa Prêmios\" e o @minhaempresa."
+
     static var example: ClientProfile {
         var p = newProfile(named: "Exemplo")
-        p.extraInstructions = "Troque pelos nomes reais: ex. remover o nome \"Minha Empresa Prêmios\" e o @minhaempresa."
+        p.extraInstructions = exampleInstructions
         return p
     }
 }

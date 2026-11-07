@@ -39,6 +39,8 @@ enum InstructionInterpreter {
 
     static func prompt(for raw: String) -> String {
         """
+        \(Niche.promptContext)
+
         You help configure a batch job that edits advertising images. First, each image is cleaned \
         (brand elements are removed). Then several new variations of each image are generated.
         The user wrote instructions for this batch in Brazilian Portuguese. Split them into exactly three groups:

@@ -32,6 +32,8 @@ enum CreativePlanner {
     static func prompt(removeItems: [String], extra: String, instructions: BatchInstructions?) -> String {
         let list = removeItems.isEmpty ? "(none)" : removeItems.map { "- \($0)" }.joined(separator: "\n")
         var p = """
+        \(Niche.promptContext)
+
         You are the art director orchestrating an automated pipeline that edits one advertising image (attached). \
         Cheaper models will execute your instructions literally and cannot see this request, so you must turn the \
         user's wishes into exact, complete, unambiguous instructions for THIS specific image.
@@ -71,14 +73,17 @@ enum CreativePlanner {
         - "final_text": the exact text the image must have after applying ALL requests. When removing a word breaks a \
         sentence, rewrite that sentence minimally so it stays natural and correct in Brazilian Portuguese, keeping the \
         same meaning and offer (e.g. "GOSTA DE <removed>?" → "GOSTA DE JOGAR?"). Never introduce another brand, game \
-        or company name. Never keep a forbidden term. Keep everything else identical, including prices and numbers.
+        or company name. Never keep a forbidden term. Keep everything else identical, including amounts, odds, \
+        multipliers, bonuses and other numbers. Never add a promise or claim of winnings that the original does not make.
+        - Mandatory notices: \(Niche.mandatoryNotices)
         - "clean_instruction": an English instruction for the image-editing model, specific to this image. Name each \
         element to erase and where it is. For every text line that changes, quote the old line and the exact new line \
         ("Replace the headline 'X' with 'Y', same font, colors and effects"). Say what must stay unchanged. \
         Small text inside phone screens, game thumbnails or signs that shows a forbidden term must be blurred, \
         erased or replaced with a neutral graphic.
         - "variation_rules": English rules every variation must follow (user's direction and constraints, what must \
-        never appear, what must stay faithful). Empty if nothing beyond the defaults.
+        never appear, what must stay faithful: say which game or sport this is and which elements identify it, so the \
+        variations never drift to another game, sport or theme). Empty if nothing beyond the defaults.
         - "doubts": in Brazilian Portuguese, anything ambiguous you had to decide (empty string if none).
         - "needs_cleaning": false ONLY when this image has nothing to erase or change at all: none of the requested \
         elements or forbidden terms are visible, "final_text" is identical to "original_text", and no other edit was \

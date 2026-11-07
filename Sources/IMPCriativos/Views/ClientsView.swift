@@ -130,7 +130,7 @@ struct ClientEditor: View {
                 } header: {
                     Text("O que remover")
                 } footer: {
-                    Text("Seja específico: \"Nome Jaqueira Prêmios\", \"@jaqueirapremios\", \"logo da coroa dourada no topo\". Quanto mais claro, melhor a limpeza.")
+                    Text("Seja específico: \"Nome MinhaBet\", \"@minhabet\", \"site minhabet.bet.br\", \"logo da coroa dourada no topo\". Quanto mais claro, melhor a limpeza. O aviso 18+ e o \"Jogue com responsabilidade\" são mantidos, a menos que você peça para tirar.")
                 }
 
                 Section {
@@ -178,17 +178,18 @@ struct ClientEditor: View {
                             draft.axes.append(VariationAxis(name: "Novo eixo", instruction: "Describe how this variation should differ."))
                         } label: { Label("Adicionar eixo", systemImage: "plus") }
                         Spacer()
-                        Button("Restaurar eixos padrão") { draft.axes = ClientProfile.defaultAxes }
+                        Button("Usar os \(ClientProfile.defaultAxes.count) eixos padrão (cassino e bet)") { draft.axes = ClientProfile.defaultAxes }
+                            .help("Troca a lista deste cliente pelos eixos padrão. Só vale depois de Salvar.")
                     }
                     .buttonStyle(.borderless)
                 } header: {
                     Text("Eixos de variação")
                 } footer: {
-                    Text("Cada variação usa um eixo, em ordem (v1 = 1º eixo, v2 = 2º…). Se pedir mais variações que eixos, eles se repetem. Instruções em inglês costumam funcionar melhor, mas português também funciona.")
+                    Text("Os eixos são usados em rodízio pelos criativos do lote: com 4 variações, o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. Para usar sempre os mesmos eixos, deixe na lista só a quantidade de variações. Cada eixo é uma direção de arte completa; o app já garante o mesmo jogo ou esporte, o texto exato, os avisos 18+ e nenhuma promessa nova. Instruções em inglês costumam funcionar melhor.")
                 }
 
                 Section {
-                    TextField(text: $draft.extraInstructions, prompt: Text("Ex.: nunca mudar a cor do carro; manter o selo 'Autorizado'"), axis: .vertical) { EmptyView() }
+                    TextField(text: $draft.extraInstructions, prompt: Text("Ex.: nunca mudar as odds nem o valor do bônus; manter o mascote do jogo"), axis: .vertical) { EmptyView() }
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(3...8)

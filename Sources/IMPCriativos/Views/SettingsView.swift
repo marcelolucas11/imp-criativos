@@ -179,6 +179,9 @@ struct SettingsView: View {
                     }
 
                     Section("Sobre") {
+                        LabeledContent("Feito para") {
+                            Text(Niche.summary)
+                        }
                         LabeledContent("Repositório") {
                             Link("github.com/\(AppInfo.updateRepo)", destination: URL(string: "https://github.com/\(AppInfo.updateRepo)")!)
                         }

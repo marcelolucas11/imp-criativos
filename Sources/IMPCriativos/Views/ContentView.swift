@@ -62,7 +62,7 @@ struct SidebarBrand: View {
             Image("BrandMark").resizable().scaledToFit().frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 0) {
                 Text("IMP Criativos").font(.headline)
-                Text("v\(AppInfo.version)").font(.caption2).foregroundStyle(.secondary)
+                Text("\(Niche.name) · v\(AppInfo.version)").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
         }

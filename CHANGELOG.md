@@ -1,5 +1,18 @@
 # Histórico de versões
 
+## [1.0.0-beta.14] — 2026-11-07
+
+**App exclusivo de cassino e bet, com 50 eixos de variação novos**
+
+- **O app agora é declarado e configurado só para criativos de cassino online e apostas esportivas (bet).** O nicho fica num lugar só do código (`Niche.swift`) e entra em todos os pedidos às IAs: planejamento, leitura das instruções do lote, limpeza, variações, análise, checagem e a nova tentativa em bloqueio. Saíram as referências a prêmio físico e produto, que vinham do começo do projeto.
+- **50 eixos de variação de cassino e bet no lugar dos 6 antigos.** Cada eixo é uma direção de arte completa (layout, fundo, estilo, luz e tratamento do texto), para cada variação sair com cara de peça nova feita pelo mesmo designer. São 6 famílias: layout, estilo gráfico, cenário, luz e cor, tipografia e oferta, ângulo e energia. Os eixos de cenário têm versão para cassino e para bet esportiva (ex.: mesa de feltro ou gramado; salão de cassino ou lounge de estádio). Lista completa em `docs/EIXOS-DE-VARIACAO.md`.
+- **Todos os eixos passam a ser usados (rodízio).** Antes, todo criativo usava só os primeiros eixos da lista (com 4 variações, só os 4 primeiros). Agora o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. A lista padrão alterna as famílias, então as 4 variações de cada criativo saem de famílias diferentes. Quem quiser sempre os mesmos eixos deixa na lista só a quantidade de variações.
+- **Variações mais diferentes do original.** O pedido de variação agora diz para tratar o criativo limpo como briefing (assunto, texto, tema e oferta), não como molde de layout, e montar uma peça nova.
+- **Regras de coerência para todas as variações**, inclusive com eixos escritos por você: mesmo jogo ou esporte, mesma oferta, texto exato, e nada de palavras, números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho que não estejam no original. Se um eixo não combinar com o tema (ex.: cenário de cassino num criativo de bet esportiva), a IA adapta o eixo ao tema do criativo.
+- **Avisos obrigatórios preservados.** A limpeza, o planejamento e as variações mantêm o "18+" e o "Jogue com responsabilidade". Se o aviso tiver o nome da casa, sai só o nome.
+- **Clientes antigos:** quem ainda usava os 6 eixos padrão sem mudança passa sozinho para os 50. Quem personalizou os eixos continua com os seus; o botão **Usar os 50 eixos padrão (cassino e bet)** troca quando quiser (só vale depois de Salvar).
+- Exemplos e textos da tela de Clientes, do Novo lote, do Início e de Configurações → Sobre falam de casa de apostas ("Minha Bet", @minhabet, minhabet.bet.br). A barra lateral mostra "Cassino e bet" ao lado da versão.
+
 ## [1.0.0-beta.13] — 2026-11-06
 
 **Ordem dos eixos de variação**

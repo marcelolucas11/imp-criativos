@@ -3,6 +3,7 @@
 ## Visão geral
 
 App nativo para macOS 14+ (Apple Silicon), em Swift/SwiftUI, sem dependências externas.
+Feito **somente para criativos de cassino online e apostas esportivas (bet)** — ver [Nicho](#nicho-cassino-e-bet).
 O projeto Xcode é gerado pelo [XcodeGen](https://github.com/yonaskolb/XcodeGen) a partir do `project.yml`.
 
 ```
@@ -16,8 +17,8 @@ Pasta de criativos
 [2] ANÁLISE ─────── IA de visão + leitura do próprio Mac (Vision) conferem os termos proibidos;
                     se sobrar algum, refaz a limpeza sozinha 1x. Texto travado = texto final do plano
    ↓
-[3] VARIAÇÕES ───── N variações com o texto final travado; leitura do Mac confere cada uma e
-                    refaz sozinha 1x se aparecer termo proibido
+[3] VARIAÇÕES ───── N variações com o texto final travado, um eixo de cassino/bet por variação (em rodízio
+                    entre os criativos); leitura do Mac confere cada uma e refaz sozinha 1x se aparecer termo proibido
    ↓
 [4] CHECAGEM ────── IA confere se o texto saiu igual e se a marca não voltou
    ↓
@@ -26,12 +27,38 @@ Pasta de criativos
 [6] EXPORTAÇÃO ──── tamanho original ou fixo, JPG/PNG, nomenclatura cliente_criativo_vN
 ```
 
+## Nicho: cassino e bet
+
+O app atende um único nicho: anúncios de **cassino online** e **apostas esportivas (bet)** de operadores autorizados no Brasil
+(Lei 14.790/2023). Isso está centralizado em `Models/Niche.swift`, usado por todos os prompts:
+
+| Texto em `Niche` | Onde entra | Para quê |
+|---|---|---|
+| `promptContext` | Planejamento, interpretação, limpeza, variações, análise, checagem | Toda IA sabe que é criativo de cassino/bet |
+| `mainSubject` | Variações | "Assunto principal" = jogo (tela, símbolos, personagens, mesa, roleta, cartas), celular com o app, pessoa, atleta, bola, ou a própria oferta |
+| `mandatoryNotices` | Limpeza, planejamento, variações | Manter "18+" e "Jogue com responsabilidade" (Portaria SPA/MF 1.231/2024); se o aviso tiver a marca, sai só a marca |
+| `coherenceRules` | Variações | Mesmo jogo/esporte e oferta; proibido adicionar palavras, números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho |
+
+`Prompts.neutral` (nova tentativa em bloqueio) descreve o anúncio como de operador de cassino e apostas licenciado no Brasil, só para adultos.
+
+### Eixos de variação
+
+- 50 eixos padrão em `Models/DefaultAxes.swift`, **gerado** por `scripts/eixos_variacao.py` junto com `docs/EIXOS-DE-VARIACAO.md` (para mudar, edite o script e rode `python3 scripts/eixos_variacao.py .`).
+  Cada eixo é uma direção de arte completa que começa com *Complete redesign*; os de cenário se adaptam ao tema
+  ("para cassino… / para bet esportiva…"). A ordem alterna famílias (layout, estilo, cenário, luz, tipografia, ângulo).
+- `Prompts.variation` trata a referência (o limpo) como **briefing de conteúdo, não molde**, e pede peça nova; se o eixo não
+  combinar com o tema da referência, a IA adapta o eixo ao tema.
+- **Rodízio** (`JobStore.createJob`): a variação `i` do criativo `n` usa `axes[(n × variações + i) % axes.count]`.
+  Com a lista do mesmo tamanho do número de variações, o comportamento é o antigo (todos os criativos usam os mesmos eixos).
+- **Migração** (`ClientStore.migrateLegacyDefaults`): perfis com os 6 eixos padrão antigos, sem edição, passam para os 50.
+  Perfis personalizados ficam como estão; o botão "Usar os 50 eixos padrão" troca quando o usuário quiser.
+
 ## Pastas do código
 
 | Pasta | Responsabilidade |
 |---|---|
 | `App/` | Ciclo de vida, Dock ↔ barra de menus, confirmação ao sair, modelo central (`AppModel`) |
-| `Models/` | `Job`, `JobItem`, `Variation`, `ClientProfile`, `AppSettings` |
+| `Models/` | `Niche` (cassino e bet), `Job`, `JobItem`, `Variation`, `ClientProfile`, `DefaultAxes` (gerado), `AppSettings` |
 | `Storage/` | Chaves de API (`chaves.json`), perfis de clientes (JSON), lotes (JSON + imagens), caminhos |
 | `Providers/` | Interface `AIProvider` e implementações Gemini (Interactions API) e OpenAI |
 | `Pipeline/` | `JobRunner` (fila e etapas), `Prompts`, `ImageTools`, `Exporter`, `CostEstimator` |
@@ -154,4 +181,4 @@ identidade entre versões (com verificação de origem no atualizador).
 
 ## Fora da v1
 
-Vídeos · espanhol · Macs Intel · envio direto para a Meta · texto aplicado por código com templates.
+Vídeos · espanhol · Macs Intel · envio direto para a Meta · texto aplicado por código com templates · qualquer nicho que não seja cassino ou bet.

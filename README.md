@@ -4,7 +4,7 @@
 
 <h1 align="center">IMP Criativos</h1>
 
-<p align="center">App para Mac que remove a marca de criativos e gera variações em lote com IA (Gemini ou GPT).</p>
+<p align="center">App para Mac que remove a marca de criativos de <b>cassino online e bet (apostas esportivas)</b> e gera variações em lote com IA (Gemini ou GPT).</p>
 
 <p align="center">
   <a href="https://github.com/marcelolucas11/imp-criativos/releases/download/mac/IMP-Criativos.dmg">
@@ -14,12 +14,19 @@
 
 ---
 
+## Para quem é
+
+O IMP Criativos é feito **somente para criativos de cassino online e apostas esportivas (bet)** de operadores autorizados no Brasil.
+Todos os prompts das IAs partem desse contexto (`Sources/IMPCriativos/Models/Niche.swift`): o mesmo jogo ou esporte é mantido,
+nenhuma odd, multiplicador, valor, bônus ou promessa de ganho é inventado, e os avisos **18+** e de **jogo responsável** são preservados.
+Não é um app de uso geral nem para rifas ou sorteios.
+
 ## O que faz
 
 1. **Lê uma pasta** de criativos (JPG, PNG, WEBP, HEIC).
 2. **Limpa** cada criativo: remove logo, nome da empresa, @, site, telefone, CNPJ — a lista é editável por cliente.
 3. **Confere** a limpeza e transcreve o texto do criativo.
-4. **Gera N variações** de cada um, cada uma num eixo diferente (fundo, composição, iluminação, ângulo…), mantendo o texto exato.
+4. **Gera N variações** de cada um, cada uma num **eixo de variação** diferente, mantendo o texto exato. O app já vem com **50 eixos de cassino e bet** ([lista](docs/EIXOS-DE-VARIACAO.md)), usados em rodízio pelos criativos do lote: cada variação sai com cara de peça nova, sem fugir do jogo ou esporte do original.
    - **Instruções por lote (opcional):** no Novo lote, escreva em texto livre o que quer (ex.: "tirar todo nome Aviator, adicionar o nome Y, ângulos bem variados"). O app separa em *remover*, *alterar texto* e *direção das variações*, mostra para você conferir e aplica cada parte na etapa certa.
 5. **Confere o texto** de cada variação e marca divergências.
 6. **Fila de revisão**: aprovar, refazer (com observação) ou descartar.
