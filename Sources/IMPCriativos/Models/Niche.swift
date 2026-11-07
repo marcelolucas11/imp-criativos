@@ -42,15 +42,13 @@ enum Niche {
     never write text on it, and never make it cuter, younger or more childish: keep a premium, adult, cinematic look.
     """
 
-    /// Avisos obrigatórios da publicidade de apostas no Brasil.
-    /// Portaria SPA/MF 1.231/2024 (18+) e Portaria SPA/MF 1.964/2026 (advertência do Ministério da Fazenda,
-    /// horizontal, legível, no mínimo 10% da área do anúncio, desde 17/07/2026).
+    /// Avisos que já estão no criativo: 18+ e jogo responsável (Portaria SPA/MF 1.231/2024).
+    /// 1.0.0-beta.16: o app não impõe a advertência "Ministério da Fazenda adverte" nem tamanho mínimo de aviso
+    /// (decisão do dono do app); só não apaga o que já existe sem pedido.
     static let mandatoryNotices = """
-    Keep every mandatory notice that is in the image, horizontal, clear and legible, never smaller than in the \
-    reference: the "Ministério da Fazenda adverte: …" warning (it must keep at least 10% of the ad area), the age \
-    notice ("18+" or "proibido para menores de 18 anos") and any responsible-gambling message (for example \
-    "Jogue com responsabilidade"), unless the user explicitly asked to remove it. If such a notice contains a brand \
-    name, remove only the brand name.
+    Keep any age notice ("18+", "proibido para menores de 18 anos") and any responsible-gambling message \
+    (for example "Jogue com responsabilidade") that is in the image, legible, unless the user explicitly asked \
+    to remove it. If such a notice contains a brand name, remove only the brand name.
     """
 
     /// Regras que nenhuma variação pode quebrar (coerência com o criativo de entrada).

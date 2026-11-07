@@ -232,7 +232,6 @@ def gen_md(axes):
       "Se um eixo não combinar com o tema (ex.: cenário de cassino num criativo de bet esportiva), a IA adapta ao tema da referência.")
     w("- **Cenários adaptativos**: os eixos de cenário têm as duas versões (\"para cassino online… / para bet esportiva…\"). Nenhum leva para cassino físico (salão, máquinas, mesas de feltro, Las Vegas): o script recusa esses termos.")
     w("- **Personagens 3D** (mascotes dos jogos online): o prompt-base (`Niche.characterRules`) mantém o mesmo personagem em todas as variações — mesmo desenho, cores, roupa, acessórios e acabamento 3D —, mudando só pose, expressão e ângulo quando o eixo pede. Nunca adiciona outro personagem nem deixa o personagem mais infantil. A família *Personagem e jogo* foi feita para esses criativos.")
-    w("- **Avisos obrigatórios** (Portaria SPA/MF 1.964/2026, desde 17/07/2026): a advertência \"Ministério da Fazenda adverte: …\" fica horizontal, legível e com pelo menos 10% da área; o 18+ e o \"Jogue com responsabilidade\" também ficam. Por isso nenhum eixo pede para encolher o texto.")
     w("- **Sem nomes de jogos ou casas de aposta** e sem palavras de promessa nas instruções (validado por script).")
     w("- **Risco de texto**: chance de a IA errar a grafia ao reestilizar as letras. Baixo = texto em blocos limpos; "
       "Alto = letras 3D, quadrinhos, placa de título de jogo. Os de risco alto saem mais diferentes, mas geram mais aviso de texto e refação.")

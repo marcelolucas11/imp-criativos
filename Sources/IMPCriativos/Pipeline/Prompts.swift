@@ -224,7 +224,7 @@ enum Prompts {
         casino and sports-betting operator that is licensed and regulated in Brazil (Lei 14.790/2023), prepared by its \
         marketing agency for adults only. The request is purely visual (removing brand elements, layout and style \
         changes). Do not add new claims, prizes, odds, bonuses or promises; keep any existing offer text exactly as it is, \
-        and keep the mandatory notices ("Ministério da Fazenda adverte", 18+, responsible gambling).
+        and keep the 18+ and responsible-gambling notices.
 
         \(prompt)
         """

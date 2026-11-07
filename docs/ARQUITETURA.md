@@ -39,7 +39,7 @@ usado por todos os prompts:
 | `promptContext` | Planejamento, interpretação, limpeza, variações, análise, checagem | Toda IA sabe que é criativo de cassino/bet |
 | `mainSubject` | Variações | "Assunto principal" = personagem/mascote 3D, jogo (tela, rolos, símbolos, gemas, grade, roleta, cartas, objeto voador), celular com o app, pessoa, atleta, bola, ou a própria oferta |
 | `characterRules` | Variações (e uma linha na limpeza; o planejamento descreve o personagem em `variation_rules`) | Mesmo personagem 3D em todas as variações (desenho, cores, roupa, acessórios, acabamento 3D); só pose/expressão/ângulo mudam; nunca outro personagem nem visual mais infantil (Portaria Interministerial nº 73/2026) |
-| `mandatoryNotices` | Limpeza, planejamento, variações | Manter "Ministério da Fazenda adverte: …" (horizontal, legível, ≥ 10% da área — Portaria SPA/MF 1.964/2026), "18+" e "Jogue com responsabilidade"; se o aviso tiver a marca, sai só a marca |
+| `mandatoryNotices` | Limpeza, planejamento, variações | Manter "18+" e "Jogue com responsabilidade" que já estão no criativo; se o aviso tiver a marca, sai só a marca. O app não impõe a advertência do Ministério da Fazenda nem tamanho mínimo (beta.16) |
 | `coherenceRules` | Variações | Mesmo jogo/esporte e oferta; proibido adicionar palavras, números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho |
 
 `Prompts.neutral` (nova tentativa em bloqueio) descreve o anúncio como de operador de cassino e apostas licenciado no Brasil, só para adultos.

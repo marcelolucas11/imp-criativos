@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## [1.0.0-beta.16] — 2026-11-07
+
+- **Removida a regra da advertência "Ministério da Fazenda adverte".** O app não exige mais esse aviso nem tamanho mínimo de 10% da área. Continua só mantendo o 18+ e o "Jogue com responsabilidade" que já estão no criativo (a menos que você peça para tirar).
+
 ## [1.0.0-beta.15] — 2026-11-07
 
 **Filtro de cassino online: personagens 3D, sem cassino físico e avisos de 2026**
