@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## [1.0.0-beta.15] — 2026-11-07
+
+**Filtro de cassino online: personagens 3D, sem cassino físico e avisos de 2026**
+
+- **Cassino é sempre online.** O contexto enviado às IAs agora diz que o jogo é de celular ou computador e proíbe transformar o anúncio em cena de cassino físico (salão, fileiras de máquinas, mesas num ambiente, ruas e letreiros estilo Las Vegas).
+- **Personagens 3D tratados como assunto principal.** O mascote ou personagem 3D do jogo continua o mesmo em todas as variações: mesmo desenho, cores, roupa, acessórios e acabamento 3D, inclusive quando o fundo vira pop art, pixel art ou colagem. Só a pose, a expressão e o ângulo podem mudar, quando o eixo pede. O app nunca adiciona outro personagem nem deixa o personagem mais infantil. O planejamento passa a descrever o personagem para as variações não o trocarem.
+- **Avisos obrigatórios de 2026.** Além do 18+ e do "Jogue com responsabilidade", a limpeza, o planejamento e as variações mantêm a advertência "Ministério da Fazenda adverte: …" na horizontal, legível e com pelo menos 10% da área do anúncio (Portaria SPA/MF 1.964/2026, em vigor desde 17/07/2026).
+- **Eixos revisados (continuam 50).** Saíram os que levavam para cassino físico ou fugiam do nicho online: Salão premium, Mesa de feltro ou gramado, Lounge VIP, Vista de cima, Letreiro luminoso, Cidade à noite e Retrô anos 80. Entraram Ambiente de app premium, Superfície do jogo, Cenário temático do jogo, Placa de título de jogo e a nova família **Personagem e jogo**: Personagem em nova pose, Saindo da tela do celular e Símbolos do jogo em 3D. Arena à noite e Arcade retrô foram ajustados. O script que gera os eixos agora recusa termos de cassino físico.
+- Clientes que estavam com os 50 eixos da beta.14 sem edição passam sozinhos para a lista nova.
+
 ## [1.0.0-beta.14] — 2026-11-07
 
 **App exclusivo de cassino e bet, com 50 eixos de variação novos**

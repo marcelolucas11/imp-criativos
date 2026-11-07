@@ -30,13 +30,16 @@ Pasta de criativos
 ## Nicho: cassino e bet
 
 O app atende um único nicho: anúncios de **cassino online** e **apostas esportivas (bet)** de operadores autorizados no Brasil
-(Lei 14.790/2023). Isso está centralizado em `Models/Niche.swift`, usado por todos os prompts:
+(Lei 14.790/2023). Cassino é sempre online (jogos de celular: slots, crash, mines, roleta e cartas ao vivo, com personagens e
+símbolos 3D); o contexto proíbe transformar o anúncio em cena de cassino físico. Isso está centralizado em `Models/Niche.swift`,
+usado por todos os prompts:
 
 | Texto em `Niche` | Onde entra | Para quê |
 |---|---|---|
 | `promptContext` | Planejamento, interpretação, limpeza, variações, análise, checagem | Toda IA sabe que é criativo de cassino/bet |
-| `mainSubject` | Variações | "Assunto principal" = jogo (tela, símbolos, personagens, mesa, roleta, cartas), celular com o app, pessoa, atleta, bola, ou a própria oferta |
-| `mandatoryNotices` | Limpeza, planejamento, variações | Manter "18+" e "Jogue com responsabilidade" (Portaria SPA/MF 1.231/2024); se o aviso tiver a marca, sai só a marca |
+| `mainSubject` | Variações | "Assunto principal" = personagem/mascote 3D, jogo (tela, rolos, símbolos, gemas, grade, roleta, cartas, objeto voador), celular com o app, pessoa, atleta, bola, ou a própria oferta |
+| `characterRules` | Variações (e uma linha na limpeza; o planejamento descreve o personagem em `variation_rules`) | Mesmo personagem 3D em todas as variações (desenho, cores, roupa, acessórios, acabamento 3D); só pose/expressão/ângulo mudam; nunca outro personagem nem visual mais infantil (Portaria Interministerial nº 73/2026) |
+| `mandatoryNotices` | Limpeza, planejamento, variações | Manter "Ministério da Fazenda adverte: …" (horizontal, legível, ≥ 10% da área — Portaria SPA/MF 1.964/2026), "18+" e "Jogue com responsabilidade"; se o aviso tiver a marca, sai só a marca |
 | `coherenceRules` | Variações | Mesmo jogo/esporte e oferta; proibido adicionar palavras, números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho |
 
 `Prompts.neutral` (nova tentativa em bloqueio) descreve o anúncio como de operador de cassino e apostas licenciado no Brasil, só para adultos.
@@ -50,7 +53,7 @@ O app atende um único nicho: anúncios de **cassino online** e **apostas esport
   combinar com o tema da referência, a IA adapta o eixo ao tema.
 - **Rodízio** (`JobStore.createJob`): a variação `i` do criativo `n` usa `axes[(n × variações + i) % axes.count]`.
   Com a lista do mesmo tamanho do número de variações, o comportamento é o antigo (todos os criativos usam os mesmos eixos).
-- **Migração** (`ClientStore.migrateLegacyDefaults`): perfis com os 6 eixos padrão antigos, sem edição, passam para os 50.
+- **Migração** (`ClientStore.migrateLegacyDefaults`): perfis com uma lista padrão antiga sem edição (os 6 eixos até a beta.13, ou os 50 da beta.14, reconhecidos por impressão digital SHA-256 em `ClientProfile.outdatedDefaultFingerprints`) passam para a lista atual.
   Perfis personalizados ficam como estão; o botão "Usar os 50 eixos padrão" troca quando o usuário quiser.
 
 ## Pastas do código

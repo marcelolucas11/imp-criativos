@@ -41,7 +41,7 @@ enum Prompts {
 
         Fill every erased area naturally so it blends with the surrounding background, as if those elements never existed. \
         Keep everything that the instructions do not mention exactly as it is. Do not add any new logo, watermark, brand \
-        name, handle, phone number or website.
+        name, handle, phone number or website. Keep any 3D character or mascot exactly as it is.
         \(Niche.mandatoryNotices)
         """
         if !extra.trimmed.isEmpty {
@@ -66,7 +66,8 @@ enum Prompts {
         people, sports elements), colors, layout, composition \
         and all other text exactly as they are (except the forbidden terms below, which must disappear even from headlines; \
         rewrite the affected line minimally so it still reads naturally, without adding another brand). \
-        Do not add any new logo, watermark, brand name, handle, phone number or website.
+        Do not add any new logo, watermark, brand name, handle, phone number or website. \
+        Keep any 3D character or mascot exactly as it is (same design, pose, colors and render style).
         \(Niche.mandatoryNotices)
         """
         p += forbiddenBlock(forbidden, context: "result")
@@ -144,6 +145,7 @@ enum Prompts {
         If the direction does not fit the theme of the reference (for example a casino scene for a sports-betting ad, \
         or a stadium for a casino game), adapt it to the reference's own theme instead of changing the theme.
         \(Niche.mainSubject)
+        \(Niche.characterRules)
 
         \(Niche.coherenceRules)
         - \(Niche.mandatoryNotices)
@@ -222,7 +224,7 @@ enum Prompts {
         casino and sports-betting operator that is licensed and regulated in Brazil (Lei 14.790/2023), prepared by its \
         marketing agency for adults only. The request is purely visual (removing brand elements, layout and style \
         changes). Do not add new claims, prizes, odds, bonuses or promises; keep any existing offer text exactly as it is, \
-        and keep the mandatory 18+ and responsible-gambling notices.
+        and keep the mandatory notices ("Ministério da Fazenda adverte", 18+, responsible gambling).
 
         \(prompt)
         """

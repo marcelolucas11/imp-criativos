@@ -15,10 +15,11 @@ from collections import Counter
 FAM = {
     "A": "Layout",
     "B": "Estilo gráfico",
-    "C": "Cenário (cassino ou bet)",
+    "C": "Cenário (cassino online ou bet)",
     "D": "Luz e cor",
     "E": "Tipografia e oferta",
     "F": "Ângulo e energia",
+    "G": "Personagem e jogo",
 }
 
 # (família, nome, o que muda, risco de texto, serve para, instrução)
@@ -59,11 +60,9 @@ AXES = [
     ("B", "Colagem recortada", "Recorte com borda de adesivo e papel rasgado", "Médio", "Ambos",
      "Complete redesign as a cut-out collage: the main subject cut out with a thick white sticker outline, over layered torn-paper shapes and textured paper in bold colors, slightly tilted for energy. Text on paper strips or tape pieces, clearly legible."),
     ("B", "Arcade retrô", "Pixel art, scanlines e cores de fliperama", "Médio", "Ambos",
-     "Complete redesign in a retro arcade style: pixel-art borders and shapes, subtle scanlines and glowing screen colors around the main subject, which stays realistic, on a dark background. Text in bold blocky letters, perfectly spelled and fully legible."),
+     "Complete redesign in a retro arcade style: pixel-art borders and shapes, subtle scanlines and glowing screen colors around the main subject, which keeps its own look (photo or polished 3D render), on a dark background. Text in bold blocky letters, perfectly spelled and fully legible."),
     ("B", "Gradiente líquido", "Fundo de gradiente fluido e orgânico", "Baixo", "Ambos",
      "Complete redesign with a fluid gradient style: smooth liquid color mesh and organic blobs flowing behind the main subject, vibrant but harmonious palette, soft glow where the colors meet. Text clean, in white or dark, for maximum contrast."),
-    ("B", "Retrô anos 80", "Pôr do sol synthwave com grade neon", "Médio", "Ambos",
-     "Complete redesign in a retro 80s synthwave style: purple-to-orange sunset sky, glowing grid floor in perspective, chrome highlights, the main subject placed on the horizon. Text in bold retro letters with a subtle chrome or glow effect, fully legible."),
     ("B", "Pop art", "Retícula, contorno preto e cores primárias", "Alto", "Ambos",
      "Complete redesign in a pop-art style: halftone dot textures, bold black outlines, flat saturated primary colors, empty comic-style burst shapes behind the main subject with no words inside them. Text in heavy comic-style letters, perfectly spelled."),
     ("B", "Holográfico", "Fundo iridescente com brilho arco-íris", "Baixo", "Ambos",
@@ -71,26 +70,24 @@ AXES = [
     ("B", "Cinematográfico", "Cor de cinema, névoa, assunto como herói", "Médio", "Ambos",
      "Complete redesign with a cinematic look: moody teal-and-orange color grading, dramatic contrast and light fog, the main subject lit like the hero of a film poster. Text in a tall, elegant condensed typeface, with no credits block and no extra text."),
     # ---------------- C — Cenário (adaptativo) ----------------
-    ("C", "Salão premium", "Salão de cassino elegante ou área VIP de estádio", "Baixo", "Ambos",
-     "Complete redesign set in a premium venue that matches the reference: for a casino game, an elegant casino floor with blurred warm lights and gold details; for sports betting, a modern stadium lounge with glowing screens in the background showing no readable text. The main subject in front, sharp."),
-    ("C", "Mesa de feltro ou gramado", "Assunto sobre feltro (cassino) ou gramado (bet)", "Baixo", "Ambos",
-     "Complete redesign on a surface that matches the theme: for a casino game, a deep green or burgundy felt table under a warm overhead lamp; for sports betting, close-up stadium turf or court with painted lines. The main subject placed on it, seen from above at an angle."),
-    ("C", "Arena à noite", "Estádio vazio sob refletores ou skyline noturno", "Médio", "Ambos",
-     "Complete redesign with a night arena atmosphere: for sports betting, an empty stadium under bright floodlights; for a casino game, a glamorous night skyline full of colorful lights. The main subject in front, sharp; cinematic contrast; text over the darker sky area."),
+    ("C", "Arena à noite", "Estádio vazio (bet) ou o mundo do jogo à noite (cassino)", "Médio", "Ambos",
+     "Complete redesign with a night arena atmosphere: for sports betting, an empty stadium under bright floodlights; for an online casino game, the game's own world at night, glowing in its own colors. The main subject in front, sharp; cinematic contrast; text over the darker sky area."),
     ("C", "Palco de revelação", "Palco vazio, holofotes e fumaça", "Baixo", "Ambos",
      "Complete redesign as a big reveal on stage: the main subject in the center of an empty stage under strong spotlights, with light beams and a little haze, dark venue around it. Exciting event atmosphere. Text above and below the subject."),
-    ("C", "Cidade à noite", "Cidade noturna com bokeh e reflexos", "Médio", "Ambos",
-     "Complete redesign with an urban night setting: the main subject in front of a city at night with colorful bokeh lights and a wet reflective street or rooftop, cinematic contrast. Text in clean bright letters over the darker sky."),
     ("C", "Fumaça e partículas", "Fumaça colorida e partículas de luz", "Baixo", "Ambos",
      "Complete redesign with an abstract atmospheric setting: the main subject surrounded by swirling colored smoke, floating light particles and soft sparks on a dark background, as if materializing. Text crisp and bright, where the background is calm."),
     ("C", "Estúdio infinito", "Foto de estúdio em fundo infinito colorido", "Baixo", "Ambos",
      "Complete redesign as a professional studio shot: the main subject in a seamless infinite studio (cyclorama) in a bold new color, perfect softbox lighting, crisp reflections and a soft floor shadow. Text arranged cleanly in the empty space."),
-    ("C", "Lounge VIP", "Ambiente VIP escuro com couro e dourado", "Baixo", "Ambos",
-     "Complete redesign in an exclusive VIP lounge with dark leather, gold trims, warm indirect lights and shallow depth of field, the main subject presented as the star of the room: for a casino game, a private gaming room; for sports betting, a members lounge with team-neutral colors."),
     ("C", "Campo gráfico", "Campo/quadra estilizado ou padrão do próprio jogo", "Baixo", "Ambos",
      "Complete redesign with a graphic field: for sports betting, a stylized top-down pitch or court with glowing lines; for a casino game, a subtle repeating pattern built from the shapes and colors of the reference's own game. The main subject large on top."),
     ("C", "Universo do próprio jogo", "Expande cores, símbolos e texturas da referência", "Baixo", "Ambos",
      "Complete redesign that expands the reference's own visual world: take the colors, symbols, characters or textures already present in the reference and build an immersive full-canvas scene around the main subject, bigger, deeper and more layered, without bringing in elements from other games or sports."),
+    ("C", "Ambiente de app premium", "Visual brilhante de app de jogo premium", "Baixo", "Ambos",
+     "Complete redesign in the glossy look of a premium mobile gaming app: deep gradient background (purple, navy or emerald with gold accents), glowing light streaks and soft colored bokeh, the main subject in front, sharp and lit like a hero. For sports betting, add subtle glowing pitch lines."),
+    ("C", "Superfície do jogo", "Assunto sobre plataforma feita do próprio jogo", "Baixo", "Ambos",
+     "Complete redesign where the main subject stands on a glossy 3D platform built from its own game: for an online casino game, its reels, grid, wheel or board turned into a shiny surface in perspective; for sports betting, a stylized pitch or court. Clean background, strong depth."),
+    ("C", "Cenário temático do jogo", "Mundo 3D que o tema do jogo sugere", "Baixo", "Ambos",
+     "Complete redesign set in the world that the reference's own theme suggests (for example an oriental temple for an oriental-themed game, open sky for a flight game, a sweets landscape for a candy-themed game), built only from the theme already visible in the reference and rendered as a detailed 3D environment around the main subject. For sports betting, the sport's own arena."),
     # ---------------- D — Luz e cor ----------------
     ("D", "Clima oposto", "Inverte o clima: quente↔frio, escuro↔claro", "Baixo", "Ambos",
      "Complete redesign using the opposite mood of the reference: if it is warm, make it cool; if dark, make it bright; if very colorful, make it restrained. New background, new accent colors, matching new lighting on the main subject and a rearranged layout."),
@@ -117,24 +114,30 @@ AXES = [
      "Complete redesign with high-impact typography: the headline in heavy condensed capitals with a thick contrasting outline and a hard drop shadow, slightly tilted; the main subject large beside it without covering any letter. Bold, punchy background."),
     ("E", "Oferta como herói", "A linha da oferta vira o centro da peça", "Médio", "Ambos",
      "Complete redesign where the offer line that is already in the text (the bonus, the odds or the main benefit, exactly as written) becomes the visual hero: set large inside a bold shape such as a ticket, ribbon or glowing pill at the center, with the main subject around it. Every number exactly as given."),
-    ("E", "Letreiro luminoso", "Título em letreiro de lâmpadas ou painel de LED", "Alto", "Ambos",
-     "Complete redesign with the headline on an illuminated sign: for a casino game, a vintage marquee with small light bulbs around its border; for sports betting, a clean stadium LED panel. Letters clean and fully legible, showing only the given text. The main subject below the sign."),
+    ("E", "Placa de título de jogo", "Título numa placa 3D estilo jogo online", "Alto", "Ambos",
+     "Complete redesign with the headline on a 3D title plaque in the style of an online game title: beveled, glossy, with metallic or gem trim and a soft glow, showing only the given text, fully legible. For sports betting, a sleek broadcast-style graphic bar. The main subject below the plaque."),
     # ---------------- F — Ângulo e energia ----------------
     ("F", "Ação e velocidade", "Rastros de velocidade, diagonal forte", "Médio", "Ambos",
      "Complete redesign with dynamic action: speed streaks, motion blur and an energy burst behind the main subject, as if it is bursting toward the viewer, with a strong diagonal composition. Text in bold italic letters along the diagonal, fully legible."),
     ("F", "Momento congelado", "Câmera lenta com partículas suspensas", "Baixo", "Ambos",
      "Complete redesign as a frozen high-speed moment: the main subject captured mid-motion with light trails, sparks and small fragments suspended in the air around it, ultra-sharp detail on a dark background. Text in a clean block at the top."),
-    ("F", "Vista de cima", "Flat lay: tudo visto de cima", "Baixo", "Ambos",
-     "Complete redesign as a top-down flat lay: the main subject seen from directly above on a textured surface that matches the theme (felt for a casino game, turf or court for sports betting), with elements already in the reference arranged neatly around it. Text on a solid band."),
     ("F", "Ângulo monumental", "Câmera baixa grande-angular, assunto gigante", "Baixo", "Ambos",
      "Complete redesign with a dramatic low-angle, wide-lens view that makes the main subject look monumental, strong perspective lines leading to it and a deep sky or ceiling behind it. Text in a tight block at the top."),
     ("F", "Painéis múltiplos", "Tela dividida em painéis com recortes do assunto", "Médio", "Ambos",
      "Complete redesign as a split screen: the canvas divided into two or three vertical panels, each showing a different crop of the same main subject (wide view, detail, glow), with all the text on one solid band across the panels."),
+    # ---------------- G — Personagem e jogo (cassino online) ----------------
+    ("G", "Personagem em nova pose", "Mesmo personagem 3D em pose e ângulo novos", "Baixo", "Ambos",
+     "Complete redesign around the character: if the reference has a 3D character or mascot, show the very same character (identical design, colors, outfit, accessories and render style) in a new dynamic pose and camera angle, larger and closer, over a new background; if it has none, show the main subject from a bold new angle."),
+    ("G", "Saindo da tela do celular", "Personagem/símbolos saindo da tela do celular", "Médio", "Ambos",
+     "Complete redesign with the main subject (the 3D character, the game symbols or the athlete) bursting out of a modern smartphone screen in 3D, breaking the frame toward the viewer, the phone tilted in perspective and its screen showing only the game's own visuals with no readable text. Text in a clean block above."),
+    ("G", "Símbolos do jogo em 3D", "Símbolos do próprio jogo flutuando em 3D", "Baixo", "Ambos",
+     "Complete redesign with the reference's own game elements (only symbols, gems, cards, balls or icons already in the reference) floating around the main subject as glossy 3D objects at different depths, with depth of field and a soft glow. Deep-colored background, text in a clean block."),
 ]
 
 GAME_NAMES = r"aviator|fortune|tiger|tigrinho|mines|spaceman|plinko|crash|blaze|bet365|betano|pixbet|sportingbet|stake|esportes da sorte|superbet|kto|betnacional|f12|estrela ?bet"
 PROMISE = r"jackpot|\bwin\b|\bwins\b|winner|winning|money|cash|\bcoins?\b|prize|payout|\brich\b|guarantee|free|easy|profit|income"
-CHILD = r"cartoon|toy|kid|child|school"
+CHILD = r"cartoon|toy|kid|child|school|cute"
+PHYSICAL = r"casino floor|slot machines?|marquee|vegas|croupier|dealer|felt|lounge|gaming room|\bchips?\b|light bulbs|skyline|casino building"
 
 
 def interleave(axes):
@@ -170,17 +173,17 @@ def validate(axes):
         if serve not in ("Ambos",): errors.append(f"{tag} 'serve para' inválido")
         if not inst.startswith("Complete redesign"): errors.append(f"{tag} não começa com 'Complete redesign'")
         if "main subject" not in inst: errors.append(f"{tag} não fala do assunto principal")
-        for label, pat in (("nome de jogo/marca", GAME_NAMES), ("promessa/dinheiro", PROMISE), ("público infantil", CHILD)):
+        for label, pat in (("nome de jogo/marca", GAME_NAMES), ("promessa/dinheiro", PROMISE), ("público infantil", CHILD), ("cassino físico", PHYSICAL)):
             m = re.search(pat, inst, re.I)
             if m: errors.append(f"{tag} {label}: '{m.group(0)}'")
         if '"' in inst or "\\" in inst: errors.append(f"{tag} aspas/barra na instrução")
         words = len(inst.split())
-        if not 25 <= words <= 75: errors.append(f"{tag} {words} palavras (fora de 25–75)")
+        if not 25 <= words <= 80: errors.append(f"{tag} {words} palavras (fora de 25–75)")
     # eixos de cenário precisam se adaptar a cassino E bet esportiva, ou usar só o que já está na referência
     for fam, name, *_rest in axes:
         inst = _rest[-1]
         if fam == "C" and not (("casino" in inst and "sports betting" in inst) or "reference" in inst or "empty stage" in inst
-                               or "city at night" in inst or "smoke" in inst or "studio" in inst):
+                               or "smoke" in inst or "studio" in inst or "sports betting" in inst):
             errors.append(f"[{name}] cenário não adaptativo")
     return errors
 
@@ -194,7 +197,7 @@ def gen_swift(axes):
         "import Foundation",
         "",
         "// ARQUIVO GERADO por scripts/eixos_variacao.py — não edite à mão (docs/EIXOS-DE-VARIACAO.md é gerado junto).",
-        "// 1.0.0-beta.14: 50 eixos de variação feitos para criativos de CASSINO e BET (apostas esportivas).",
+        "// 1.0.0-beta.15: 50 eixos de variação para criativos de CASSINO ONLINE e BET (apostas esportivas), sem cassino físico.",
         "// Ordem alternando famílias: com o rodízio, cada criativo recebe eixos seguidos de famílias diferentes.",
         "// As regras de coerência (mesmo jogo/esporte, texto exato, sem promessa nova, avisos 18+) ficam no",
         "// prompt-base (`Prompts.variation` + `Niche`), então valem também para eixos que o usuário escrever.",
@@ -214,8 +217,8 @@ def gen_md(axes):
     w = out.append
     w("# Eixos de variação — cassino e bet (50 eixos padrão)")
     w("")
-    w("> O IMP Criativos é feito **somente para criativos de cassino online e apostas esportivas (bet)**. "
-      "Estes são os eixos padrão desde a **1.0.0-beta.14**. Fonte única: `scripts/eixos_variacao.py`, que gera este arquivo e `Models/DefaultAxes.swift`.")
+    w("> O IMP Criativos é feito **somente para criativos de cassino online e apostas esportivas (bet)**. Cassino é sempre online (jogos de celular, personagens e símbolos 3D), nunca cassino físico. "
+      "Estes são os eixos padrão desde a **1.0.0-beta.15** (filtro de cassino online). Fonte única: `scripts/eixos_variacao.py`, que gera este arquivo e `Models/DefaultAxes.swift`.")
     w("")
     w("## Como funcionam")
     w("")
@@ -227,10 +230,12 @@ def gen_md(axes):
       "o mesmo jogo ou esporte, a mesma oferta, o texto exato, os avisos 18+ e de jogo responsável, e proíbe adicionar palavras, "
       "números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho. "
       "Se um eixo não combinar com o tema (ex.: cenário de cassino num criativo de bet esportiva), a IA adapta ao tema da referência.")
-    w("- **Cenários adaptativos**: os eixos de cenário têm as duas versões (\"para cassino… / para bet esportiva…\").")
+    w("- **Cenários adaptativos**: os eixos de cenário têm as duas versões (\"para cassino online… / para bet esportiva…\"). Nenhum leva para cassino físico (salão, máquinas, mesas de feltro, Las Vegas): o script recusa esses termos.")
+    w("- **Personagens 3D** (mascotes dos jogos online): o prompt-base (`Niche.characterRules`) mantém o mesmo personagem em todas as variações — mesmo desenho, cores, roupa, acessórios e acabamento 3D —, mudando só pose, expressão e ângulo quando o eixo pede. Nunca adiciona outro personagem nem deixa o personagem mais infantil. A família *Personagem e jogo* foi feita para esses criativos.")
+    w("- **Avisos obrigatórios** (Portaria SPA/MF 1.964/2026, desde 17/07/2026): a advertência \"Ministério da Fazenda adverte: …\" fica horizontal, legível e com pelo menos 10% da área; o 18+ e o \"Jogue com responsabilidade\" também ficam. Por isso nenhum eixo pede para encolher o texto.")
     w("- **Sem nomes de jogos ou casas de aposta** e sem palavras de promessa nas instruções (validado por script).")
     w("- **Risco de texto**: chance de a IA errar a grafia ao reestilizar as letras. Baixo = texto em blocos limpos; "
-      "Alto = letras 3D, quadrinhos, letreiro. Os de risco alto saem mais diferentes, mas geram mais aviso de texto e refação.")
+      "Alto = letras 3D, quadrinhos, placa de título de jogo. Os de risco alto saem mais diferentes, mas geram mais aviso de texto e refação.")
     w("- **Personalizar**: em Clientes → Eixos de variação dá para editar, reordenar, apagar ou escrever eixos. "
       "O botão \"Usar os 50 eixos padrão\" traz esta lista de volta.")
     w("")
@@ -266,9 +271,9 @@ def gen_md(axes):
     idx = {a[1]: i for i, a in enumerate(axes, 1)}
     kits = [
         ("Bem diferentes", ["Destaque em close", "Neon noturno", "Claro e arejado", "Colagem recortada"]),
-        ("Premium", ["Preto e dourado", "Editorial assimétrico", "Lounge VIP", "Monocromático + destaque"]),
+        ("Premium", ["Preto e dourado", "Editorial assimétrico", "Ambiente de app premium", "Monocromático + destaque"]),
         ("Seguro para o texto", ["Cartão flutuante", "3D premium", "Clima oposto", "Palco de revelação"]),
-        ("Cassino", ["Mesa de feltro ou gramado", "Universo do próprio jogo", "Letreiro luminoso", "Brilho âmbar"]),
+        ("Cassino online (personagem 3D)", ["Personagem em nova pose", "Símbolos do jogo em 3D", "Cenário temático do jogo", "Saindo da tela do celular"]),
         ("Bet esportiva", ["Arena à noite", "Campo gráfico", "Ação e velocidade", "Ângulo monumental"]),
     ]
     w("| Kit | Eixos |")

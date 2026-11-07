@@ -25,13 +25,14 @@ final class ClientStore: ObservableObject {
         migrateLegacyDefaults()
     }
 
-    /// 1.0.0-beta.14 (app só de cassino e bet): perfis que ainda têm os 6 eixos padrão antigos, sem nenhuma
-    /// edição, passam a usar os 50 eixos de cassino e bet; o texto do perfil de exemplo antigo é atualizado.
+    /// 1.0.0-beta.14/15 (app só de cassino online e bet): perfis que ainda têm uma lista padrão antiga sem nenhuma
+    /// edição (6 eixos até a beta.13 ou os 50 da beta.14) passam a usar os eixos padrão atuais; o texto do perfil
+    /// de exemplo antigo é atualizado.
     /// Perfis com eixos personalizados ficam como estão (o botão "Usar os 50 eixos padrão" troca quando quiser).
     func migrateLegacyDefaults() {
         for var profile in clients {
             var changed = false
-            if profile.usesLegacyDefaultAxes {
+            if profile.usesOutdatedDefaultAxes {
                 profile.axes = ClientProfile.defaultAxes
                 changed = true
             }

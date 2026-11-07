@@ -17,8 +17,10 @@
 ## Para quem é
 
 O IMP Criativos é feito **somente para criativos de cassino online e apostas esportivas (bet)** de operadores autorizados no Brasil.
-Todos os prompts das IAs partem desse contexto (`Sources/IMPCriativos/Models/Niche.swift`): o mesmo jogo ou esporte é mantido,
-nenhuma odd, multiplicador, valor, bônus ou promessa de ganho é inventado, e os avisos **18+** e de **jogo responsável** são preservados.
+Cassino aqui é sempre **online** (jogos de celular, com personagens e símbolos em 3D), nunca cassino físico.
+Todos os prompts das IAs partem desse contexto (`Sources/IMPCriativos/Models/Niche.swift`): o mesmo jogo ou esporte e o mesmo
+personagem 3D são mantidos, nenhuma odd, multiplicador, valor, bônus ou promessa de ganho é inventado, e os avisos obrigatórios
+(**"Ministério da Fazenda adverte: …"**, **18+** e **jogo responsável**) são preservados.
 Não é um app de uso geral nem para rifas ou sorteios.
 
 ## O que faz

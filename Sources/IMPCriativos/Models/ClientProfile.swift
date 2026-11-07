@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Um eixo de variação: a "direção" que diferencia uma variação das outras.
 struct VariationAxis: Codable, Identifiable, Hashable {
@@ -54,6 +55,26 @@ struct ClientProfile: Codable, Identifiable, Hashable {
         guard axes.count == Self.legacyDefaultAxes.count else { return false }
         let legacy = Set(Self.legacyDefaultAxes.map { "\($0.name)|\($0.instruction)" })
         return Set(axes.map { "\($0.name)|\($0.instruction)" }) == legacy
+    }
+
+    /// Impressões digitais de listas padrão antigas, para reconhecer perfis que nunca editaram os eixos.
+    /// beta.14: os 50 eixos de cassino e bet anteriores ao filtro de cassino online (beta.15).
+    static let outdatedDefaultFingerprints: Set<String> = [
+        "54cb5c1cb24a953ae611a70240bf65538ad1f2c91d830fc558642fcb1bb12f7b",
+    ]
+
+    /// Impressão digital da lista de eixos, sem depender da ordem: SHA-256 de cada "nome|instrução",
+    /// hashes ordenados, unidos por quebra de linha e passados de novo no SHA-256.
+    static func fingerprint(_ axes: [VariationAxis]) -> String {
+        func hex(_ s: String) -> String {
+            SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
+        }
+        return hex(axes.map { hex("\($0.name)|\($0.instruction)") }.sorted().joined(separator: "\n"))
+    }
+
+    /// true quando o perfil usa uma lista padrão antiga sem edição (6 eixos até a beta.13 ou 50 da beta.14).
+    var usesOutdatedDefaultAxes: Bool {
+        usesLegacyDefaultAxes || Self.outdatedDefaultFingerprints.contains(Self.fingerprint(axes))
     }
 
     static func newProfile(named name: String = "Novo cliente") -> ClientProfile {

@@ -83,7 +83,9 @@ enum CreativePlanner {
         erased or replaced with a neutral graphic.
         - "variation_rules": English rules every variation must follow (user's direction and constraints, what must \
         never appear, what must stay faithful: say which game or sport this is and which elements identify it, so the \
-        variations never drift to another game, sport or theme). Empty if nothing beyond the defaults.
+        variations never drift to another game, sport or theme; if there is a 3D character or mascot, describe it \
+        precisely (species or design, colors, outfit, accessories) so every variation keeps the identical character). \
+        Empty only if there is nothing beyond the defaults.
         - "doubts": in Brazilian Portuguese, anything ambiguous you had to decide (empty string if none).
         - "needs_cleaning": false ONLY when this image has nothing to erase or change at all: none of the requested \
         elements or forbidden terms are visible, "final_text" is identical to "original_text", and no other edit was \
