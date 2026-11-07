@@ -29,7 +29,7 @@ Cole, clique em **Salvar** e depois em **Testar**. A chave fica salva só neste 
 
 Em **Clientes**:
 
-- **O que remover:** seja específico — nome exato da casa de apostas, @ do Instagram, site (ex.: `minhabet.bet.br`), descrição da logo. Nomes de jogos que não podem aparecer vão entre aspas (ex.: `"Aviator"`): o app reescreve a frase de forma natural. O aviso **18+** e o **"Jogue com responsabilidade"** são mantidos, a menos que você peça para tirar.
+- **O que remover:** seja específico — nome exato da casa de apostas, @ do Instagram, site (ex.: `minhabet.bet.br`), descrição da logo. Nomes de jogos que não podem aparecer vão entre aspas (ex.: `"Aviator"`): o app reescreve a frase de forma natural. Os avisos **18+**, **"Jogue com responsabilidade"** e advertências seguem a opção em **Configurações → Avisos do criativo**: desligada (padrão) o app remove; ligada, mantém.
 - **Eixos de variação:** o cliente novo já vem com os [50 eixos de cassino e bet](EIXOS-DE-VARIACAO.md). Eles rodam entre os criativos do lote (com 4 variações: 1º criativo usa os eixos 1–4, o 2º usa 5–8…). Para usar sempre os mesmos, deixe na lista só a quantidade de variações. Pedido de texto (tirar ou trocar palavras) não é eixo: vai em "O que remover" ou nas instruções do lote.
 - **Instruções extras:** regras que valem sempre (ex.: "nunca mudar as odds nem o valor do bônus").
 - **Exportar:** gera um arquivo `.impcliente` para enviar a outra pessoa, que importa com o botão de importar.

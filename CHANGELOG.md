@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## [1.0.0-beta.17] — 2026-11-07
+
+- **Nova chave "Manter avisos 18+ e de jogo responsável"** em Configurações → Avisos do criativo. **Vem desligada de fábrica**: o app remove o 18+, o "Jogue com responsabilidade" e advertências (como "Ministério da Fazenda adverte…") na limpeza, tira esses avisos do texto final e as variações não os recriam. **Ligada**: o app mantém os avisos que já estão no criativo (se o aviso tiver o nome da casa, sai só o nome). Vale para os próximos lotes e para o que for refeito; o estado aparece no registro de cada lote em Histórico.
+
 ## [1.0.0-beta.16] — 2026-11-07
 
 - **Removida a regra da advertência "Ministério da Fazenda adverte".** O app não exige mais esse aviso nem tamanho mínimo de 10% da área. Continua só mantendo o 18+ e o "Jogue com responsabilidade" que já estão no criativo (a menos que você peça para tirar).

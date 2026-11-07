@@ -20,7 +20,7 @@ O IMP Criativos é feito **somente para criativos de cassino online e apostas es
 Cassino aqui é sempre **online** (jogos de celular, com personagens e símbolos em 3D), nunca cassino físico.
 Todos os prompts das IAs partem desse contexto (`Sources/IMPCriativos/Models/Niche.swift`): o mesmo jogo ou esporte e o mesmo
 personagem 3D são mantidos, nenhuma odd, multiplicador, valor, bônus ou promessa de ganho é inventado, e os avisos
-**18+** e de **jogo responsável** que já estão no criativo são preservados.
+**18+** e de **jogo responsável** seguem a opção em Configurações → *Avisos do criativo* (de fábrica, o app remove; ligada, mantém).
 Não é um app de uso geral nem para rifas ou sorteios.
 
 ## O que faz

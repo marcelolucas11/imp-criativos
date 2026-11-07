@@ -42,13 +42,28 @@ enum Niche {
     never write text on it, and never make it cuter, younger or more childish: keep a premium, adult, cinematic look.
     """
 
-    /// Avisos que já estão no criativo: 18+ e jogo responsável (Portaria SPA/MF 1.231/2024).
-    /// 1.0.0-beta.16: o app não impõe a advertência "Ministério da Fazenda adverte" nem tamanho mínimo de aviso
-    /// (decisão do dono do app); só não apaga o que já existe sem pedido.
-    static let mandatoryNotices = """
-    Keep any age notice ("18+", "proibido para menores de 18 anos") and any responsible-gambling message \
-    (for example "Jogue com responsabilidade") that is in the image, legible, unless the user explicitly asked \
-    to remove it. If such a notice contains a brand name, remove only the brand name.
+    /// Chave do UserDefaults da opção "Manter avisos 18+ e de jogo responsável" (Configurações).
+    /// Desligada de fábrica: o app REMOVE os avisos. Ligada: mantém os que já estão no criativo.
+    static let keepNoticesKey = "keepWarningNotices"
+
+    /// Estado atual da opção (lido direto do UserDefaults para valer em qualquer etapa do lote).
+    static var keepNotices: Bool { UserDefaults.standard.bool(forKey: keepNoticesKey) }
+
+    /// Regra dos avisos (18+, jogo responsável, advertências) enviada à limpeza, ao planejamento e às variações.
+    static var noticesRule: String { keepNotices ? keepNoticesRule : removeNoticesRule }
+
+    static let keepNoticesRule = """
+    Keep any age notice ("18+", "proibido para menores de 18 anos"), responsible-gambling message (for example \
+    "Jogue com responsabilidade") and gambling warning that is in the image, legible. If such a notice contains a \
+    brand name, remove only the brand name.
+    """
+
+    static let removeNoticesRule = """
+    Remove from the image every age notice ("18+", "+18", "proibido para menores de 18 anos"), every \
+    responsible-gambling message (for example "Jogue com responsabilidade", "Aposte com responsabilidade") and \
+    every gambling warning or disclaimer (for example "Ministério da Fazenda adverte: …", "jogar pode causar \
+    dependência"), including their badges and icons, filling those areas naturally as if they never existed. \
+    These notices are not part of the final text, and none may be added.
     """
 
     /// Regras que nenhuma variação pode quebrar (coerência com o criativo de entrada).

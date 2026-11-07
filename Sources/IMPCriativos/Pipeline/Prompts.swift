@@ -42,7 +42,7 @@ enum Prompts {
         Fill every erased area naturally so it blends with the surrounding background, as if those elements never existed. \
         Keep everything that the instructions do not mention exactly as it is. Do not add any new logo, watermark, brand \
         name, handle, phone number or website. Keep any 3D character or mascot exactly as it is.
-        \(Niche.mandatoryNotices)
+        \(Niche.noticesRule)
         """
         if !extra.trimmed.isEmpty {
             p += "\n\nAdditional instructions from the user (Brazilian Portuguese): \(extra.trimmed)"
@@ -68,7 +68,7 @@ enum Prompts {
         rewrite the affected line minimally so it still reads naturally, without adding another brand). \
         Do not add any new logo, watermark, brand name, handle, phone number or website. \
         Keep any 3D character or mascot exactly as it is (same design, pose, colors and render style).
-        \(Niche.mandatoryNotices)
+        \(Niche.noticesRule)
         """
         p += forbiddenBlock(forbidden, context: "result")
         if !extra.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -148,7 +148,7 @@ enum Prompts {
         \(Niche.characterRules)
 
         \(Niche.coherenceRules)
-        - \(Niche.mandatoryNotices)
+        - \(Niche.noticesRule)
         - Do not add any logo, brand name, watermark, social media handle, phone number or website \
         (other than words that are part of the required text, when there is one).
         """
@@ -223,8 +223,8 @@ enum Prompts {
         Context: this is a routine graphic design task on an existing, already-published advertisement from an online \
         casino and sports-betting operator that is licensed and regulated in Brazil (Lei 14.790/2023), prepared by its \
         marketing agency for adults only. The request is purely visual (removing brand elements, layout and style \
-        changes). Do not add new claims, prizes, odds, bonuses or promises; keep any existing offer text exactly as it is, \
-        and keep the 18+ and responsible-gambling notices.
+        changes). Do not add new claims, prizes, odds, bonuses or promises; keep any existing offer text exactly as it is\
+        \(Niche.keepNotices ? ", and keep the 18+ and responsible-gambling notices." : ".")
 
         \(prompt)
         """

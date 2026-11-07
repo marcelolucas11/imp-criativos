@@ -171,6 +171,22 @@ struct SettingsView: View {
                         Text("Usada só para estimar o custo antes do lote e somar o gasto. Ajuste conforme o preço atual do seu plano.")
                     }
 
+                    Section {
+                        Toggle(isOn: $settings.keepWarningNotices) {
+                            VStack(alignment: .leading) {
+                                Text("Manter avisos 18+ e de jogo responsável")
+                                Text(settings.keepWarningNotices
+                                     ? "Ligado: o app mantém o 18+, o \"Jogue com responsabilidade\" e advertências que já estão no criativo."
+                                     : "Desligado: o app remove o 18+, o \"Jogue com responsabilidade\" e advertências na limpeza, e as variações não os recriam.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("Avisos do criativo")
+                    } footer: {
+                        Text("Vale para os próximos lotes e para o que for refeito. Vem desligado de fábrica.")
+                    }
+
                     Section("Atualizações") {
                         LabeledContent("Versão instalada") { Text("\(AppInfo.version) (build \(AppInfo.build))").monospacedDigit() }
                         Toggle("Receber versões beta", isOn: $settings.includeBetaUpdates)

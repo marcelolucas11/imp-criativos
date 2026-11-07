@@ -130,7 +130,7 @@ struct ClientEditor: View {
                 } header: {
                     Text("O que remover")
                 } footer: {
-                    Text("Seja específico: \"Nome MinhaBet\", \"@minhabet\", \"site minhabet.bet.br\", \"logo da coroa dourada no topo\". Quanto mais claro, melhor a limpeza. O aviso 18+ e o \"Jogue com responsabilidade\" são mantidos, a menos que você peça para tirar.")
+                    Text("Seja específico: \"Nome MinhaBet\", \"@minhabet\", \"site minhabet.bet.br\", \"logo da coroa dourada no topo\". Quanto mais claro, melhor a limpeza. Os avisos 18+ e de jogo responsável seguem a opção em Configurações → Avisos do criativo (de fábrica, são removidos).")
                 }
 
                 Section {
@@ -185,7 +185,7 @@ struct ClientEditor: View {
                 } header: {
                     Text("Eixos de variação")
                 } footer: {
-                    Text("Os eixos são usados em rodízio pelos criativos do lote: com 4 variações, o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. Para usar sempre os mesmos eixos, deixe na lista só a quantidade de variações. Cada eixo é uma direção de arte completa; o app já garante o mesmo jogo ou esporte, o mesmo personagem 3D, o texto exato, os avisos 18+ e nenhuma promessa nova. Instruções em inglês costumam funcionar melhor.")
+                    Text("Os eixos são usados em rodízio pelos criativos do lote: com 4 variações, o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. Para usar sempre os mesmos eixos, deixe na lista só a quantidade de variações. Cada eixo é uma direção de arte completa; o app já garante o mesmo jogo ou esporte, o mesmo personagem 3D, o texto exato e nenhuma promessa nova. Instruções em inglês costumam funcionar melhor.")
                 }
 
                 Section {

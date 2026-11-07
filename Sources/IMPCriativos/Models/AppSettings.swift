@@ -29,6 +29,9 @@ final class AppSettings: ObservableObject {
     @Published var openaiQuality: String { didSet { d.set(openaiQuality, forKey: "openaiQuality") } }
     /// Liga a etapa de planejamento (recomendado).
     @Published var planningEnabled: Bool { didSet { d.set(planningEnabled, forKey: "planningEnabled") } }
+    /// 1.0.0-beta.17: ligado = mantém os avisos 18+ / jogo responsável / advertências; desligado (padrão) = remove.
+    /// Lido pelos prompts em `Niche.noticesRule`.
+    @Published var keepWarningNotices: Bool { didSet { d.set(keepWarningNotices, forKey: Niche.keepNoticesKey) } }
 
     // Preços estimados (US$) — só para a estimativa e o contador de gasto
     @Published var priceGeminiImage: Double { didSet { d.set(priceGeminiImage, forKey: "priceGeminiImage") } }
@@ -54,6 +57,7 @@ final class AppSettings: ObservableObject {
             "priceAnalysis": 0.002,
             "planningEnabled": true,
             "pricePlanning": 0.02,
+            Niche.keepNoticesKey: false,
         ])
         let defaultOut = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
             .appendingPathComponent("IMP Criativos").path
@@ -75,6 +79,7 @@ final class AppSettings: ObservableObject {
         priceAnalysis = d.double(forKey: "priceAnalysis")
         planningEnabled = d.bool(forKey: "planningEnabled")
         pricePlanning = d.double(forKey: "pricePlanning")
+        keepWarningNotices = d.bool(forKey: Niche.keepNoticesKey)
         stageAI = Self.loadStageAI(d)
     }
 
@@ -179,6 +184,7 @@ final class AppSettings: ObservableObject {
         OpenAI qualidade \(openaiQuality) · Planejamento \(planningEnabled ? "ligado" : "desligado")
         Processamento: \(maxConcurrent) criativos por lote ao mesmo tempo · \(maxImageRequests) pedidos de imagem por IA · \(retryAttempts) tentativas em erro temporário
         Troca automática de IA: \(fallbackEnabled ? "ligada" : "desligada")\(fallbackEnabled ? (fallbackOnBlocked ? " (também em bloqueio de conteúdo)" : " (só em erro temporário)") : "")
+        Avisos 18+ e de jogo responsável: \(keepWarningNotices ? "mantidos" : "removidos")
         """
     }
 

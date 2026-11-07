@@ -227,7 +227,7 @@ def gen_md(axes):
     w("- **Rodízio entre criativos**: com 4 variações, o 1º criativo usa os eixos 1–4, o 2º usa 5–8, e assim por diante; "
       "no fim da lista, recomeça. A lista alterna famílias, então cada criativo recebe 4 direções bem diferentes.")
     w("- **Coerência garantida pelo app, não pelo eixo**: o prompt-base de toda variação (`Prompts.variation` + `Niche`) exige "
-      "o mesmo jogo ou esporte, a mesma oferta, o texto exato, os avisos 18+ e de jogo responsável, e proíbe adicionar palavras, "
+      "o mesmo jogo ou esporte, a mesma oferta e o texto exato, e proíbe adicionar palavras, "
       "números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho. "
       "Se um eixo não combinar com o tema (ex.: cenário de cassino num criativo de bet esportiva), a IA adapta ao tema da referência.")
     w("- **Cenários adaptativos**: os eixos de cenário têm as duas versões (\"para cassino online… / para bet esportiva…\"). Nenhum leva para cassino físico (salão, máquinas, mesas de feltro, Las Vegas): o script recusa esses termos.")

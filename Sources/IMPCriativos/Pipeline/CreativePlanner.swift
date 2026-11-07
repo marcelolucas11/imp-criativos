@@ -75,7 +75,7 @@ enum CreativePlanner {
         same meaning and offer (e.g. "GOSTA DE <removed>?" → "GOSTA DE JOGAR?"). Never introduce another brand, game \
         or company name. Never keep a forbidden term. Keep everything else identical, including amounts, odds, \
         multipliers, bonuses and other numbers. Never add a promise or claim of winnings that the original does not make.
-        - Mandatory notices: \(Niche.mandatoryNotices)
+        - Age and responsible-gambling notices: \(Niche.noticesRule)
         - "clean_instruction": an English instruction for the image-editing model, specific to this image. Name each \
         element to erase and where it is. For every text line that changes, quote the old line and the exact new line \
         ("Replace the headline 'X' with 'Y', same font, colors and effects"). Say what must stay unchanged. \
