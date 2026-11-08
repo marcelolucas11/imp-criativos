@@ -29,6 +29,8 @@ Não é um app de uso geral nem para rifas ou sorteios.
 2. **Limpa** cada criativo: remove logo, nome da empresa, @, site, telefone, CNPJ — a lista é editável por cliente.
 3. **Confere** a limpeza e transcreve o texto do criativo.
 4. **Gera N variações** de cada um, cada uma num **eixo de variação** diferente, mantendo o texto exato. O app já vem com **50 eixos de cassino e bet** ([lista](docs/EIXOS-DE-VARIACAO.md)), usados em rodízio pelos criativos do lote: cada variação sai com cara de peça nova, sem fugir do jogo ou esporte do original.
+   - **Teste de eixos:** coloque uma imagem e o app gera uma variação para cada eixo marcado no cliente (até os 50), com o número e o nome do eixo em cada arquivo, para comparar os estilos.
+   - **Rápido e seguro:** as variações saem em paralelo e o app aumenta sozinho os pedidos ao mesmo tempo enquanto a IA responde bem; ao primeiro sinal de risco, volta para a velocidade original.
    - **Instruções por lote (opcional):** no Novo lote, escreva em texto livre o que quer (ex.: "tirar todo nome Aviator, adicionar o nome Y, ângulos bem variados"). O app separa em *remover*, *alterar texto* e *direção das variações*, mostra para você conferir e aplica cada parte na etapa certa.
 5. **Confere o texto** de cada variação e marca divergências.
 6. **Fila de revisão**: aprovar, refazer (com observação) ou descartar.

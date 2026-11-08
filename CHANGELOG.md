@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## [1.0.0-beta.19] — 2026-11-08
+
+**Teste de eixos e modo rápido com segurança automática**
+
+- **Novo modo "Teste de eixos"** no Novo lote (ao lado de "Normal"). Cada imagem passa por **todos os eixos marcados no cliente**, na ordem da lista, sem rodízio e com uma limpeza só. Com uma imagem e os 50 eixos do catálogo, saem 50 variações, uma por eixo. Na revisão, cada variação mostra o número e o nome do eixo ("27. Título 3D"); na exportação, o nome do arquivo também leva o eixo (`cliente_criativo_v27_e27-titulo-3d.jpg`).
+- **Estimativa de tempo** no Novo lote, além do custo, e **confirmação antes de lotes grandes** (mais de 60 variações).
+- **Variações em paralelo.** Antes, as variações de um mesmo criativo saíam uma de cada vez. Agora saem juntas, até o limite da fila de imagem da IA. Num teste com uma imagem só, isso sozinho já usa as 2 vagas em vez de 1.
+- **Modo rápido com segurança automática** (Configurações → Velocidade, ligado de fábrica, teto de 4). O app começa na velocidade original (2 pedidos de imagem por IA), mede o tempo de cada imagem e sobe um pedido por vez enquanto a IA responde bem. **Volta na hora para a velocidade original** quando algo indica risco: IA ocupada (503), limite de uso (429), tempo esgotado, falha de conexão, IA ficando lenta demais com mais pedidos, Mac quente, modo de pouca energia, menos de 2 GB livres no disco ou lote 12 minutos sem concluir nada. Depois de um problema, só tenta subir de novo em 10 minutos (30 se o problema se repetir). Cada subida e descida fica no Histórico, e o topo do lote mostra a velocidade e o risco.
+- **A qualidade não depende da velocidade.** O modo rápido só muda quantos pedidos vão juntos: modelo, qualidade, prompts, checagem de texto, leitura do Mac e refações continuam iguais.
+- **Integridade das imagens.** Resposta da IA que o Mac não consegue abrir como imagem não é salva (conta como falha temporária e a reserva entra). Depois de gravar, o arquivo é conferido. E antes de cada rodada do lote, qualquer etapa "pronta" cuja imagem sumiu do disco volta sozinha para a fila.
+- **Testes automáticos** no GitHub Actions para as regras de velocidade e para as variações em paralelo (com uma IA de mentira que demora e falha): cada variação roda uma vez só, o limite é respeitado mesmo mudando no meio, e pausar não deixa nada rodando.
+
 ## [1.0.0-beta.18] — 2026-11-07
 
 **Escolha de eixos por catálogo e chave de rodízio**

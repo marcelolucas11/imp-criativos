@@ -37,8 +37,9 @@ Em **Clientes**:
 ## 4. Rodar um lote
 
 1. **Novo lote** → escolha o cliente e a pasta dos criativos.
-2. Defina o número de variações, a IA de cada etapa e o tamanho de saída.
-3. Confira a **estimativa de custo** e clique em **Iniciar lote**.
+2. Escolha o **modo**: **Normal** (defina o número de variações) ou **Teste de eixos** (uma variação para cada eixo do cliente — use 1 imagem para comparar os estilos).
+3. Defina a IA de cada etapa e o tamanho de saída.
+4. Confira a **estimativa de custo e de tempo** e clique em **Iniciar lote**.
 
 Pode fechar a janela: com "Continuar em segundo plano" ligado, o app vai para a barra de menus e avisa quando terminar.
 
@@ -47,7 +48,7 @@ Pode fechar a janela: com "Continuar em segundo plano" ligado, o app vai para a 
 - Clique em qualquer imagem para ver grande e comparar com a referência.
 - ✓ aprova · ↻ refaz (dá para escrever o que corrigir) · ✕ descarta.
 - **Ações → Aprovar pendentes sem alerta** agiliza lotes grandes.
-- **Baixar aprovados** salva tudo numa pasta `cliente/lote_data/` com nomes `cliente_criativo_v0.jpg`, `_v1`…
+- **Baixar aprovados** salva tudo numa pasta `cliente/lote_data/` com nomes `cliente_criativo_v0.jpg`, `_v1`… No teste de eixos, o nome leva o eixo: `cliente_criativo_v27_e27-titulo-3d.jpg`.
 
 ## Problemas comuns
 

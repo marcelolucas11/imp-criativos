@@ -46,6 +46,11 @@ usado por todos os prompts:
 
 ### Eixos de variação
 
+**Teste de eixos** (beta.19): no Novo lote, modo "Teste de eixos". Cada criativo passa por todos os eixos da lista do
+cliente, na ordem, sem rodízio (`JobStore.createJob(axisTest:)`, `Job.axisTest`), com uma limpeza só. Cada variação
+guarda o número do eixo no catálogo (`Variation.axisNumber`), mostrado na revisão ("27. Título 3D") e no nome exportado
+(`cliente_criativo_v27_e27-titulo-3d.jpg`). O Novo lote mostra custo e tempo e pede confirmação acima de 60 variações.
+
 - 50 eixos padrão em `Models/DefaultAxes.swift`, **gerado** por `scripts/eixos_variacao.py` junto com `docs/EIXOS-DE-VARIACAO.md` (para mudar, edite o script e rode `python3 scripts/eixos_variacao.py .`).
   Cada eixo é uma direção de arte completa que começa com *Complete redesign*; os de cenário se adaptam ao tema
   ("para cassino… / para bet esportiva…"). A ordem alterna famílias (layout, estilo, cenário, luz, tipografia, ângulo).
@@ -119,6 +124,23 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
 - **Fila por IA** (`ProviderGate`): limita pedidos simultâneos de imagem por provedor somando todos os lotes (padrão 2;
   análise 4). Quando a IA responde 429/5xx, a fila daquela IA pausa por alguns segundos para os outros pedidos não
   insistirem juntos.
+- **Modo rápido com segurança** (beta.19, `SpeedPolicy` dentro de cada fila de imagem): a fila começa na velocidade
+  original (`maxImageRequests`) e mede o tempo de cada imagem. Com 2 medidas de referência e 3 respostas boas seguidas,
+  sobe 1 pedido, até o teto (`fastImageCeiling`, padrão 4). Volta na hora para a velocidade original em: 429/5xx, tempo
+  esgotado, falha de conexão (`HTTP.send` → `reportTrouble`), Mac quente / pouca energia / menos de 2 GB livres
+  (`SpeedMonitor.macRisk`, conferido a cada 30 s) e lote sem concluir etapa por 12 minutos (vigia em `JobRunner.watch`).
+  Depois de um problema não sobe por 10 minutos (30 se forem 3 problemas em 15 minutos). Também desce 1 degrau quando
+  mais pedidos não rendem pelo menos 10% mais imagens por minuto (tempo por imagem cresceu demais) e espera 5 minutos.
+  Só muda quantos pedidos vão juntos; modelos, prompts, qualidade e checagens não mudam. Painel em Configurações →
+  Velocidade e no topo do lote (`SpeedMonitor`). Regras cobertas por testes automáticos (`Tests/IMPCriativosLogicTests`).
+- **Variações em paralelo** (beta.19, `BoundedParallel` + `JobRunner.generateVariation`): as variações de um criativo
+  saem juntas até o limite atual da fila de imagem da IA das variações (relido a cada vaga). A checagem do texto roda
+  como acompanhamento, sem ocupar vaga. Pausar não começa variações novas e devolve as em andamento para "pendente".
+  Testado com uma IA de mentira: cada variação roda uma vez só, o limite é respeitado mesmo mudando no meio, e nada fica
+  rodando depois de pausar.
+- **Integridade** (beta.19): a resposta da IA só conta se o Mac conseguir abrir como imagem (`JobRunner.validImage`;
+  senão é erro temporário e a reserva entra); depois de gravar, o arquivo é conferido (`verifySaved`); e antes de cada
+  rodada do lote, etapa "pronta" cuja imagem sumiu do disco volta para a fila (`JobStore.repairMissingFiles`).
 - **Troca automática** (`JobRunner.withFallback`): se a IA principal da etapa falhar (qualquer erro; bloqueio só se a
   opção estiver ligada) e a reserva escolhida tiver chave, a etapa é refeita nela (beta.11; antes era sempre "a outra"
   plataforma e só em erro temporário). O item guarda `providerUsed` e a tela mostra "feito com …".
@@ -145,9 +167,9 @@ nova tentativa em `auto` se recusado). A exportação ajusta para o tamanho fina
 - **Análise e checagem em travamento** (beta.9, `withFallback(quickSwitch:)`): com a outra IA disponível e a troca
   automática ligada, a IA principal tem só 2 tentativas; na falha temporária, o modelo fica 5 minutos de lado
   (`analysisCooldown`) e as próximas análises/checagens começam pela outra, que tem até 3 tentativas.
-- **Checagem em paralelo** (beta.9, `JobRunner.checkText`): as variações de um criativo rodam dentro de um
-  `withTaskGroup`; a checagem de cada variação entra como tarefa do grupo e corre junto com a próxima variação. O
-  criativo só termina quando o grupo termina, e cancelar o lote cancela as checagens em andamento.
+- **Checagem em paralelo** (beta.9, `JobRunner.checkText`; desde a beta.19 via `BoundedParallel`): a checagem de cada
+  variação corre junto com as próximas variações. O criativo só termina quando todas terminam, e cancelar o lote
+  cancela as checagens em andamento.
 - **Contexto da chamada** (`RequestContext`, task-local): leva lote, criativo e etapa até o `HTTP.send`, que avisa a tela
   ("Gemini ocupado (503) · tentativa 3/6", com contagem regressiva) e registra no histórico.
 
