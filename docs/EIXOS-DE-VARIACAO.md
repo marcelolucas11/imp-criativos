@@ -5,13 +5,13 @@
 ## Como funcionam
 
 - **Eixo = direção de arte completa de uma variação**: layout, fundo, estilo, luz e tratamento do texto. Todos começam com *Complete redesign*: a referência entra como briefing de conteúdo, não como molde.
-- **Rodízio entre criativos**: com 4 variações, o 1º criativo usa os eixos 1–4, o 2º usa 5–8, e assim por diante; no fim da lista, recomeça. A lista alterna famílias, então cada criativo recebe 4 direções bem diferentes.
+- **Rodízio entre criativos** (chave por cliente, ligada de fábrica): com 4 variações, o 1º criativo usa os eixos 1–4, o 2º usa 5–8, e assim por diante; no fim da lista, recomeça. A lista alterna famílias, então cada criativo recebe 4 direções bem diferentes. Desligado: todo criativo usa os primeiros eixos da lista.
 - **Coerência garantida pelo app, não pelo eixo**: o prompt-base de toda variação (`Prompts.variation` + `Niche`) exige o mesmo jogo ou esporte, a mesma oferta e o texto exato, e proíbe adicionar palavras, números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho. Se um eixo não combinar com o tema (ex.: cenário de cassino num criativo de bet esportiva), a IA adapta ao tema da referência.
 - **Cenários adaptativos**: os eixos de cenário têm as duas versões ("para cassino online… / para bet esportiva…"). Nenhum leva para cassino físico (salão, máquinas, mesas de feltro, Las Vegas): o script recusa esses termos.
 - **Personagens 3D** (mascotes dos jogos online): o prompt-base (`Niche.characterRules`) mantém o mesmo personagem em todas as variações — mesmo desenho, cores, roupa, acessórios e acabamento 3D —, mudando só pose, expressão e ângulo quando o eixo pede. Nunca adiciona outro personagem nem deixa o personagem mais infantil. A família *Personagem e jogo* foi feita para esses criativos.
 - **Sem nomes de jogos ou casas de aposta** e sem palavras de promessa nas instruções (validado por script).
 - **Risco de texto**: chance de a IA errar a grafia ao reestilizar as letras. Baixo = texto em blocos limpos; Alto = letras 3D, quadrinhos, placa de título de jogo. Os de risco alto saem mais diferentes, mas geram mais aviso de texto e refação.
-- **Personalizar**: em Clientes → Eixos de variação dá para editar, reordenar, apagar ou escrever eixos. O botão "Usar os 50 eixos padrão" traz esta lista de volta.
+- **Escolher e personalizar** (Clientes → Eixos de variação): botão **Catálogo do app** abre estes 50 eixos com família, o que muda, risco de texto e "Ver mais" com o prompt; marcar a bolinha põe o eixo na lista do cliente, desmarcar tira. Botão **Meus eixos** abre a biblioteca dos eixos que você criou, com a mesma bolinha. A chave **Rodízio**, ao lado do título, liga ou desliga o rodízio por cliente. "Usar os 50 padrão" traz esta lista inteira de volta.
 
 | Família | Eixos |
 |---|---|

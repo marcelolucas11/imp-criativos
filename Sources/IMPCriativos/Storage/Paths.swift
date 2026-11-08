@@ -12,6 +12,8 @@ enum Paths {
     static var clients: URL { ensure(appSupport.appendingPathComponent("clients", isDirectory: true)) }
     static var jobs: URL { ensure(appSupport.appendingPathComponent("jobs", isDirectory: true)) }
     static var updates: URL { ensure(appSupport.appendingPathComponent("updates", isDirectory: true)) }
+    /// 1.0.0-beta.18: biblioteca de eixos personalizados do usuário (vale para todos os clientes).
+    static var customAxes: URL { appSupport.appendingPathComponent("eixos-personalizados.json") }
 
     static func jobFolder(_ id: UUID) -> URL {
         ensure(jobs.appendingPathComponent(id.uuidString, isDirectory: true))

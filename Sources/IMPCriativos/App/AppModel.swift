@@ -17,6 +17,7 @@ final class AppModel: ObservableObject {
 
     let settings = AppSettings()
     let clients = ClientStore()
+    let customAxes = CustomAxisStore()
     let jobs = JobStore()
     let updater = Updater()
     let log = ActivityLog.shared
@@ -29,6 +30,7 @@ final class AppModel: ObservableObject {
     private var bag = Set<AnyCancellable>()
 
     private init() {
+        customAxes.seedIfNeeded(from: clients.clients)
         // repassa mudanças das lojas para quem observa o modelo (barra de menus, Dock)
         jobs.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         settings.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)

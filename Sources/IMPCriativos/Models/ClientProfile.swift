@@ -20,6 +20,14 @@ struct ClientProfile: Codable, Identifiable, Hashable {
     var createdAt = Date()
     /// 1.0.0-beta.6: instruções de lote salvas para reaproveitar (opcional para abrir perfis antigos).
     var savedInstructions: [String]?
+    /// 1.0.0-beta.18: rodízio dos eixos entre os criativos do lote (nil = ligado, como desde a beta.14).
+    var axisRotation: Bool?
+
+    /// Ligado: o 1º criativo usa os eixos 1–N, o 2º os seguintes… Desligado: todo criativo usa os N primeiros.
+    var rotatesAxes: Bool {
+        get { axisRotation ?? true }
+        set { axisRotation = newValue }
+    }
 
     static let defaultRemoveItems: [String] = [
         "Logotipo da empresa",

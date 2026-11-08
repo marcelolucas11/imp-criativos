@@ -97,6 +97,7 @@ final class JobStore: ObservableObject {
         let folder = folder(for: id)
         let originals = Paths.ensure(folder.appendingPathComponent("originais", isDirectory: true))
         let axes = client.axes.isEmpty ? ClientProfile.defaultAxes : client.axes
+        let rotate = client.rotatesAxes
 
         var items: [JobItem] = []
         for (n, src) in files.enumerated() {
@@ -105,10 +106,10 @@ final class JobStore: ObservableObject {
             let dst = originals.appendingPathComponent("\(String(format: "%03d", n + 1)).\(ext)")
             try FileManager.default.copyItem(at: src, to: dst)
             let size = ImageTools.pixelSize(of: dst) ?? CGSize(width: 1080, height: 1080)
-            // 1.0.0-beta.14: rodízio dos eixos entre os criativos do lote. Com 4 variações, o 1º criativo usa
-            // os eixos 1–4, o 2º os eixos 5–8… e no fim da lista recomeça. Antes, todo criativo usava só os N primeiros.
+            // Rodízio (beta.14; chave por cliente desde a beta.18): com 4 variações, o 1º criativo usa os eixos 1–4,
+            // o 2º os eixos 5–8… e no fim da lista recomeça. Desligado: todo criativo usa os N primeiros da lista.
             let vars = (0..<variations).map { i -> Variation in
-                let axis = axes[(n * variations + i) % axes.count]
+                let axis = axes[(rotate ? n * variations + i : i) % axes.count]
                 return Variation(index: i + 1, axisName: axis.name, axisInstruction: axis.instruction)
             }
             items.append(JobItem(sourceName: src.lastPathComponent,

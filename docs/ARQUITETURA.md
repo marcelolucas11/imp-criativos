@@ -51,8 +51,16 @@ usado por todos os prompts:
   ("para cassino… / para bet esportiva…"). A ordem alterna famílias (layout, estilo, cenário, luz, tipografia, ângulo).
 - `Prompts.variation` trata a referência (o limpo) como **briefing de conteúdo, não molde**, e pede peça nova; se o eixo não
   combinar com o tema da referência, a IA adapta o eixo ao tema.
-- **Rodízio** (`JobStore.createJob`): a variação `i` do criativo `n` usa `axes[(n × variações + i) % axes.count]`.
-  Com a lista do mesmo tamanho do número de variações, o comportamento é o antigo (todos os criativos usam os mesmos eixos).
+- **Rodízio** (`JobStore.createJob`): com `ClientProfile.rotatesAxes` ligado (padrão; campo `axisRotation`, nil = ligado),
+  a variação `i` do criativo `n` usa `axes[(n × variações + i) % axes.count]`; desligado, usa `axes[i % axes.count]`.
+  A chave fica ao lado do título "Eixos de variação" na tela de Clientes.
+- **Catálogo do app** (`AxisCatalog.builtIn`, gerado em `DefaultAxes.swift` com nome, família, o que muda, risco de texto e prompt):
+  janela `AxisCatalogSheet` com busca, filtro por família e risco, "Ver mais" com o prompt e bolinha que põe/tira o eixo
+  da lista do cliente (reconhecido pela instrução).
+- **Meus eixos** (`CustomAxisStore`, arquivo `eixos-personalizados.json` em Application Support): biblioteca de eixos do usuário
+  para todos os clientes, na janela `CustomAxesSheet` (bolinha, "Ver mais" com edição do nome, "o que muda" e prompt, apagar).
+  Na primeira abertura recebe os eixos personalizados que já estavam nos clientes; ao salvar um cliente, eixos novos escritos
+  na lista entram na biblioteca (os apagados da biblioteca não voltam sozinhos).
 - **Migração** (`ClientStore.migrateLegacyDefaults`): perfis com uma lista padrão antiga sem edição (os 6 eixos até a beta.13, ou os 50 da beta.14, reconhecidos por impressão digital SHA-256 em `ClientProfile.outdatedDefaultFingerprints`) passam para a lista atual.
   Perfis personalizados ficam como estão; o botão "Usar os 50 eixos padrão" troca quando o usuário quiser.
 

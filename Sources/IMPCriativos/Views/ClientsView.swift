@@ -72,9 +72,12 @@ struct ClientEditor: View {
     let original: ClientProfile
     var onDeleted: () -> Void
     @EnvironmentObject var clients: ClientStore
+    @EnvironmentObject var customAxes: CustomAxisStore
     @State private var draft: ClientProfile
     @State private var confirmDelete = false
     @State private var savedFlash = false
+    @State private var showCatalog = false
+    @State private var showCustomAxes = false
 
     init(original: ClientProfile, onDeleted: @escaping () -> Void) {
         self.original = original
@@ -147,6 +150,16 @@ struct ClientEditor: View {
                                     .labelsHidden()
                                     .textFieldStyle(.roundedBorder)
                                     .font(.headline)
+                                if let entry = AxisCatalog.entry(matching: axis) {
+                                    Text("Catálogo nº \(entry.number)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .help("\(entry.family) · \(entry.change) · risco de texto \(entry.textRisk)")
+                                } else {
+                                    Text("Meu eixo")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Button {
                                     moveAxis(axis.id, by: -1)
                                 } label: { Image(systemName: "chevron.up") }
@@ -173,19 +186,34 @@ struct ClientEditor: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    HStack {
+                    HStack(spacing: 16) {
+                        Button { showCatalog = true } label: { Label("Catálogo do app", systemImage: "square.grid.2x2") }
+                            .help("Abre os \(AxisCatalog.builtIn.count) eixos que vêm com o app, com família, o que muda e risco de texto")
+                        Button { showCustomAxes = true } label: { Label("Meus eixos", systemImage: "person.crop.square") }
+                            .help("Abre a biblioteca dos eixos que você criou")
                         Button {
                             draft.axes.append(VariationAxis(name: "Novo eixo", instruction: "Describe how this variation should differ."))
                         } label: { Label("Adicionar eixo", systemImage: "plus") }
                         Spacer()
-                        Button("Usar os \(ClientProfile.defaultAxes.count) eixos padrão (cassino e bet)") { draft.axes = ClientProfile.defaultAxes }
-                            .help("Troca a lista deste cliente pelos eixos padrão. Só vale depois de Salvar.")
+                        Button("Usar os \(ClientProfile.defaultAxes.count) padrão") { draft.axes = ClientProfile.defaultAxes }
+                            .help("Troca a lista deste cliente pelos \(ClientProfile.defaultAxes.count) eixos do catálogo. Só vale depois de Salvar.")
                     }
                     .buttonStyle(.borderless)
                 } header: {
-                    Text("Eixos de variação")
+                    HStack {
+                        Text("Eixos de variação")
+                        Text("· \(draft.axes.count) na lista")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Toggle(isOn: $draft.rotatesAxes) { Text("Rodízio") }
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .help("Ligado: cada criativo do lote usa os próximos eixos da lista. Desligado: todo criativo usa os primeiros eixos da lista.")
+                    }
                 } footer: {
-                    Text("Os eixos são usados em rodízio pelos criativos do lote: com 4 variações, o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. Para usar sempre os mesmos eixos, deixe na lista só a quantidade de variações. Cada eixo é uma direção de arte completa; o app já garante o mesmo jogo ou esporte, o mesmo personagem 3D, o texto exato e nenhuma promessa nova. Instruções em inglês costumam funcionar melhor.")
+                    Text(draft.rotatesAxes
+                         ? "Rodízio ligado: com 4 variações, o 1º criativo usa os eixos 1 a 4, o 2º usa 5 a 8, e assim por diante; no fim da lista, recomeça. Cada eixo é uma direção de arte completa; o app já garante o mesmo jogo ou esporte, o mesmo personagem 3D, o texto exato e nenhuma promessa nova."
+                         : "Rodízio desligado: todo criativo usa os primeiros eixos da lista, na ordem (v1 = 1º eixo, v2 = 2º…). Os demais eixos da lista não são usados. O app já garante o mesmo jogo ou esporte, o mesmo personagem 3D, o texto exato e nenhuma promessa nova.")
                 }
 
                 Section {
@@ -224,6 +252,13 @@ struct ClientEditor: View {
             }
             .padding(12)
         }
+        .sheet(isPresented: $showCatalog) {
+            AxisCatalogSheet(axes: $draft.axes)
+        }
+        .sheet(isPresented: $showCustomAxes) {
+            CustomAxesSheet(axes: $draft.axes)
+                .environmentObject(customAxes)
+        }
         .confirmationDialog("Excluir \(draft.name)?", isPresented: $confirmDelete) {
             Button("Excluir", role: .destructive) {
                 clients.delete(original)
@@ -237,8 +272,9 @@ struct ClientEditor: View {
         draft.removeItems = draft.removeItems.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { draft.name = "Sem nome" }
         clients.save(draft)
+        customAxes.absorb(draft.axes)
         AppLog.info(.clientes, "Perfil \"\(draft.name)\" salvo.",
-                    details: "Remover (\(draft.removeItems.count)): \(draft.removeItems.joined(separator: ", "))\nEixos de variação: \(draft.axes.count)")
+                    details: "Remover (\(draft.removeItems.count)): \(draft.removeItems.joined(separator: ", "))\nEixos de variação: \(draft.axes.count) · rodízio \(draft.rotatesAxes ? "ligado" : "desligado")")
         withAnimation { savedFlash = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { savedFlash = false } }
     }

@@ -11,6 +11,7 @@ struct IMPCriativosApp: App {
                 .environmentObject(model)
                 .environmentObject(model.settings)
                 .environmentObject(model.clients)
+                .environmentObject(model.customAxes)
                 .environmentObject(model.jobs)
                 .environmentObject(model.runner)
                 .environmentObject(model.updater)

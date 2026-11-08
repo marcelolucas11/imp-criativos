@@ -197,18 +197,47 @@ def gen_swift(axes):
         "import Foundation",
         "",
         "// ARQUIVO GERADO por scripts/eixos_variacao.py — não edite à mão (docs/EIXOS-DE-VARIACAO.md é gerado junto).",
-        "// 1.0.0-beta.15: 50 eixos de variação para criativos de CASSINO ONLINE e BET (apostas esportivas), sem cassino físico.",
+        "// 50 eixos de variação para criativos de CASSINO ONLINE e BET (apostas esportivas), sem cassino físico.",
         "// Ordem alternando famílias: com o rodízio, cada criativo recebe eixos seguidos de famílias diferentes.",
-        "// As regras de coerência (mesmo jogo/esporte, texto exato, sem promessa nova, avisos 18+) ficam no",
+        "// As regras de coerência (mesmo jogo/esporte, mesmo personagem 3D, texto exato, sem promessa nova) ficam no",
         "// prompt-base (`Prompts.variation` + `Niche`), então valem também para eixos que o usuário escrever.",
-        "extension ClientProfile {",
-        "    static let defaultAxes: [VariationAxis] = [",
+        "",
+        "/// Eixo do catálogo que vem com o app (tela \"Catálogo de eixos\").",
+        "struct BuiltInAxis: Identifiable, Hashable {",
+        "    let number: Int",
+        "    let name: String",
+        "    let family: String",
+        "    let change: String",
+        "    let textRisk: String",
+        "    let instruction: String",
+        "    var id: Int { number }",
+        "    var axis: VariationAxis { VariationAxis(name: name, instruction: instruction) }",
+        "}",
+        "",
+        "enum AxisCatalog {",
+        "    static let families: [String] = [" + ", ".join(f'"{swift_string(f)}"' for f in FAM.values()) + "]",
+        "    static let risks: [String] = [\"Baixo\", \"Médio\", \"Alto\"]",
+        "",
+        "    static let builtIn: [BuiltInAxis] = [",
     ]
     for i, (fam, name, muda, risco, serve, inst) in enumerate(axes, 1):
-        lines.append(f"        // {i}. {FAM[fam]} · risco de texto: {risco}")
-        lines.append(f'        VariationAxis(name: "{swift_string(name)}",')
-        lines.append(f'                      instruction: "{swift_string(inst)}"),')
-    lines += ["    ]", "}", ""]
+        lines.append(f'        BuiltInAxis(number: {i}, name: "{swift_string(name)}", family: "{swift_string(FAM[fam])}",')
+        lines.append(f'                    change: "{swift_string(muda)}", textRisk: "{risco}",')
+        lines.append(f'                    instruction: "{swift_string(inst)}"),')
+    lines += [
+        "    ]",
+        "",
+        "    /// Eixo do catálogo com esta instrução (os eixos da lista do cliente são reconhecidos pela instrução).",
+        "    static func entry(matching axis: VariationAxis) -> BuiltInAxis? {",
+        "        builtIn.first { $0.instruction == axis.instruction }",
+        "    }",
+        "}",
+        "",
+        "extension ClientProfile {",
+        "    static let defaultAxes: [VariationAxis] = AxisCatalog.builtIn.map(\\.axis)",
+        "}",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -224,8 +253,9 @@ def gen_md(axes):
     w("")
     w("- **Eixo = direção de arte completa de uma variação**: layout, fundo, estilo, luz e tratamento do texto. "
       "Todos começam com *Complete redesign*: a referência entra como briefing de conteúdo, não como molde.")
-    w("- **Rodízio entre criativos**: com 4 variações, o 1º criativo usa os eixos 1–4, o 2º usa 5–8, e assim por diante; "
-      "no fim da lista, recomeça. A lista alterna famílias, então cada criativo recebe 4 direções bem diferentes.")
+    w("- **Rodízio entre criativos** (chave por cliente, ligada de fábrica): com 4 variações, o 1º criativo usa os eixos 1–4, o 2º usa 5–8, "
+      "e assim por diante; no fim da lista, recomeça. A lista alterna famílias, então cada criativo recebe 4 direções bem diferentes. "
+      "Desligado: todo criativo usa os primeiros eixos da lista.")
     w("- **Coerência garantida pelo app, não pelo eixo**: o prompt-base de toda variação (`Prompts.variation` + `Niche`) exige "
       "o mesmo jogo ou esporte, a mesma oferta e o texto exato, e proíbe adicionar palavras, "
       "números, odds, multiplicadores, valores, bônus, dinheiro, pessoas, logos, selos ou promessa de ganho. "
@@ -235,8 +265,10 @@ def gen_md(axes):
     w("- **Sem nomes de jogos ou casas de aposta** e sem palavras de promessa nas instruções (validado por script).")
     w("- **Risco de texto**: chance de a IA errar a grafia ao reestilizar as letras. Baixo = texto em blocos limpos; "
       "Alto = letras 3D, quadrinhos, placa de título de jogo. Os de risco alto saem mais diferentes, mas geram mais aviso de texto e refação.")
-    w("- **Personalizar**: em Clientes → Eixos de variação dá para editar, reordenar, apagar ou escrever eixos. "
-      "O botão \"Usar os 50 eixos padrão\" traz esta lista de volta.")
+    w("- **Escolher e personalizar** (Clientes → Eixos de variação): botão **Catálogo do app** abre estes 50 eixos com família, "
+      "o que muda, risco de texto e \"Ver mais\" com o prompt; marcar a bolinha põe o eixo na lista do cliente, desmarcar tira. "
+      "Botão **Meus eixos** abre a biblioteca dos eixos que você criou, com a mesma bolinha. A chave **Rodízio**, ao lado do título, "
+      "liga ou desliga o rodízio por cliente. \"Usar os 50 padrão\" traz esta lista inteira de volta.")
     w("")
     fam_count = Counter(FAM[a[0]] for a in axes)
     risk_count = Counter(a[3] for a in axes)

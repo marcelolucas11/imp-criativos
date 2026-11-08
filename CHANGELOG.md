@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## [1.0.0-beta.18] — 2026-11-07
+
+**Escolha de eixos por catálogo e chave de rodízio**
+
+- **Chave "Rodízio"** ao lado do título "Eixos de variação" (por cliente, ligada de fábrica). Ligada: cada criativo do lote usa os próximos eixos da lista. Desligada: todo criativo usa os primeiros eixos da lista, na ordem.
+- **Botão "Catálogo do app"**: abre uma janela com os 50 eixos que vêm com o programa, catalogados por número, nome, família, o que muda e risco de texto, com busca e filtros por família e risco. "Ver mais" mostra o prompt de cada eixo. Marcar a bolinha coloca o eixo na lista do cliente; desmarcar tira. Botões para marcar ou desmarcar todos os visíveis.
+- **Botão "Meus eixos"**: biblioteca dos eixos que você criou, válida para todos os clientes, com a mesma bolinha. "Ver mais" abre a edição do nome, do "o que muda" e do prompt; dá para criar e apagar eixos. Na primeira vez, ela recebe os eixos personalizados que já estavam nos seus clientes; depois, todo eixo novo que você escrever na lista de um cliente entra nela ao Salvar.
+- Na lista do cliente, cada eixo mostra se é do catálogo (com o número) ou "Meu eixo", e o título mostra quantos eixos estão na lista.
+- As janelas mexem só na lista do cliente aberta; nada é gravado até clicar em Salvar.
+
 ## [1.0.0-beta.17] — 2026-11-07
 
 - **Nova chave "Manter avisos 18+ e de jogo responsável"** em Configurações → Avisos do criativo. **Vem desligada de fábrica**: o app remove o 18+, o "Jogue com responsabilidade" e advertências (como "Ministério da Fazenda adverte…") na limpeza, tira esses avisos do texto final e as variações não os recriam. **Ligada**: o app mantém os avisos que já estão no criativo (se o aviso tiver o nome da casa, sai só o nome). Vale para os próximos lotes e para o que for refeito; o estado aparece no registro de cada lote em Histórico.
