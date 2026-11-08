@@ -92,12 +92,15 @@ final class JobStore: ObservableObject {
                    sizeMode: OutputSizeMode,
                    format: OutputFormat,
                    verifyText: Bool,
-                   instructions: BatchInstructions? = nil) throws -> Job {
+                   instructions: BatchInstructions? = nil,
+                   axisTest: Bool = false) throws -> Job {
         let id = UUID()
         let folder = folder(for: id)
         let originals = Paths.ensure(folder.appendingPathComponent("originais", isDirectory: true))
         let axes = client.axes.isEmpty ? ClientProfile.defaultAxes : client.axes
         let rotate = client.rotatesAxes
+        // 1.0.0-beta.19: no teste de eixos, cada criativo passa por todos os eixos da lista, na ordem
+        let perItem = axisTest ? axes.count : max(1, variations)
 
         var items: [JobItem] = []
         for (n, src) in files.enumerated() {
@@ -108,9 +111,11 @@ final class JobStore: ObservableObject {
             let size = ImageTools.pixelSize(of: dst) ?? CGSize(width: 1080, height: 1080)
             // Rodízio (beta.14; chave por cliente desde a beta.18): com 4 variações, o 1º criativo usa os eixos 1–4,
             // o 2º os eixos 5–8… e no fim da lista recomeça. Desligado: todo criativo usa os N primeiros da lista.
-            let vars = (0..<variations).map { i -> Variation in
-                let axis = axes[(rotate ? n * variations + i : i) % axes.count]
-                return Variation(index: i + 1, axisName: axis.name, axisInstruction: axis.instruction)
+            let vars = (0..<perItem).map { i -> Variation in
+                let axis = axisTest ? axes[i] : axes[(rotate ? n * perItem + i : i) % axes.count]
+                var v = Variation(index: i + 1, axisName: axis.name, axisInstruction: axis.instruction)
+                v.axisNumber = AxisCatalog.entry(matching: axis)?.number
+                return v
             }
             items.append(JobItem(sourceName: src.lastPathComponent,
                                  originalFile: rel,
@@ -126,14 +131,51 @@ final class JobStore: ObservableObject {
                       cleanProvider: cleanProvider,
                       variationProvider: variationProvider,
                       analysisProvider: analysisProvider,
-                      variationsPerItem: variations,
+                      variationsPerItem: perItem,
                       sizeMode: sizeMode,
                       format: format,
                       verifyText: verifyText,
                       items: items,
-                      instructions: (instructions?.isEmpty ?? true) ? nil : instructions)
+                      instructions: (instructions?.isEmpty ?? true) ? nil : instructions,
+                      axisTest: axisTest ? true : nil)
         save(job)
         return job
+    }
+
+    /// 1.0.0-beta.19 — integridade: etapa marcada como pronta cuja imagem sumiu do disco volta para a fila.
+    /// Roda antes de cada rodada do lote, então nada termina "pronto" sem o arquivo existir.
+    /// Devolve quantas etapas voltaram.
+    @discardableResult
+    func repairMissingFiles(_ id: UUID) -> Int {
+        guard let job = job(id) else { return 0 }
+        let base = folder(for: id)
+        let exists: (String?) -> Bool = { rel in
+            guard let rel else { return false }
+            return FileManager.default.fileExists(atPath: base.appendingPathComponent(rel).path)
+        }
+        var broken = 0
+        for item in job.items {
+            if item.cleanStatus == .done && !exists(item.cleanedFile) { broken += 1 }
+            broken += item.variations.filter { $0.status == .done && !exists($0.file) }.count
+        }
+        guard broken > 0 else { return 0 }
+        update(id) { job in
+            for i in job.items.indices {
+                if job.items[i].cleanStatus == .done && !exists(job.items[i].cleanedFile) {
+                    job.items[i].cleanStatus = .pending
+                    job.items[i].cleanedFile = nil
+                    job.items[i].analysisDone = false
+                    job.items[i].cleanReview = .pending
+                }
+                for v in job.items[i].variations.indices
+                where job.items[i].variations[v].status == .done && !exists(job.items[i].variations[v].file) {
+                    job.items[i].variations[v].status = .pending
+                    job.items[i].variations[v].file = nil
+                    job.items[i].variations[v].review = .pending
+                }
+            }
+        }
+        return broken
     }
 
     /// Gasto (estimado) no mês corrente, somando todos os lotes.

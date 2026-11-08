@@ -15,6 +15,11 @@ final class AppSettings: ObservableObject {
     @Published var maxConcurrent: Int { didSet { d.set(maxConcurrent, forKey: "maxConcurrent") } }
     /// Pedidos de imagem ao mesmo tempo para cada IA, somando todos os lotes.
     @Published var maxImageRequests: Int { didSet { d.set(maxImageRequests, forKey: "maxImageRequests") } }
+    /// 1.0.0-beta.19: Modo rápido com segurança — sobe os pedidos de imagem enquanto a IA responde bem
+    /// e volta para `maxImageRequests` (velocidade original) ao primeiro sinal de risco.
+    @Published var fastMode: Bool { didSet { d.set(fastMode, forKey: "fastMode") } }
+    /// Teto do modo rápido: pedidos de imagem ao mesmo tempo por IA.
+    @Published var fastImageCeiling: Int { didSet { d.set(fastImageCeiling, forKey: "fastImageCeiling") } }
     /// Tentativas em erro temporário (503, 429, conexão), contando a primeira.
     @Published var retryAttempts: Int { didSet { d.set(retryAttempts, forKey: "retryAttempts") } }
     /// Se uma IA falhar por erro temporário, refaz com a outra (quando houver chave).
@@ -47,6 +52,8 @@ final class AppSettings: ObservableObject {
             "checkUpdatesOnLaunch": true,
             "maxConcurrent": 3,
             "maxImageRequests": 2,
+            "fastMode": true,
+            "fastImageCeiling": 4,
             "retryAttempts": 6,
             "fallbackEnabled": true,
             "fallbackOnBlocked": true,
@@ -68,6 +75,8 @@ final class AppSettings: ObservableObject {
         checkUpdatesOnLaunch = d.bool(forKey: "checkUpdatesOnLaunch")
         maxConcurrent = max(1, d.integer(forKey: "maxConcurrent"))
         maxImageRequests = max(1, d.integer(forKey: "maxImageRequests"))
+        fastMode = d.bool(forKey: "fastMode")
+        fastImageCeiling = max(1, d.integer(forKey: "fastImageCeiling"))
         retryAttempts = max(1, d.integer(forKey: "retryAttempts"))
         fallbackEnabled = d.bool(forKey: "fallbackEnabled")
         fallbackOnBlocked = d.bool(forKey: "fallbackOnBlocked")
@@ -169,6 +178,15 @@ final class AppSettings: ObservableObject {
         return out
     }
 
+    /// Passa velocidade original, teto e modo rápido para as filas de imagem (vale na hora, inclusive com lote rodando).
+    func applySpeed() {
+        let base = maxImageRequests, ceiling = fastImageCeiling, fast = fastMode
+        Task { @MainActor in
+            await ProviderGate.configure(imageLimit: base, fastCeiling: ceiling, fast: fast)
+            await SpeedMonitor.shared.refresh()
+        }
+    }
+
     func imagePrice(for p: ProviderKind) -> Double {
         p == .gemini ? priceGeminiImage : priceOpenAIImage
     }
@@ -182,7 +200,8 @@ final class AppSettings: ObservableObject {
         return """
         \(stages)
         OpenAI qualidade \(openaiQuality) · Planejamento \(planningEnabled ? "ligado" : "desligado")
-        Processamento: \(maxConcurrent) criativos por lote ao mesmo tempo · \(maxImageRequests) pedidos de imagem por IA · \(retryAttempts) tentativas em erro temporário
+        Processamento: \(maxConcurrent) criativos por lote ao mesmo tempo · \(maxImageRequests) pedidos de imagem por IA (velocidade original) · \(retryAttempts) tentativas em erro temporário
+        Modo rápido com segurança: \(fastMode ? "ligado, teto de \(max(maxImageRequests, fastImageCeiling)) pedidos de imagem por IA" : "desligado")
         Troca automática de IA: \(fallbackEnabled ? "ligada" : "desligada")\(fallbackEnabled ? (fallbackOnBlocked ? " (também em bloqueio de conteúdo)" : " (só em erro temporário)") : "")
         Avisos 18+ e de jogo responsável: \(keepWarningNotices ? "mantidos" : "removidos")
         """

@@ -12,6 +12,19 @@ struct NewJobView: View {
     @State private var folder: URL?
     @State private var files: [URL] = []
     @State private var variations = 4
+    /// 1.0.0-beta.19: Normal ou Teste de eixos.
+    @State private var mode: BatchMode = .normal
+    @State private var confirmBig = false
+    @ObservedObject private var speed = SpeedMonitor.shared
+
+    enum BatchMode: String, CaseIterable, Identifiable {
+        case normal = "Normal"
+        case axisTest = "Teste de eixos"
+        var id: String { rawValue }
+    }
+
+    /// Acima disso, o app pede confirmação antes de iniciar.
+    static let bigBatch = 60
     // 1.0.0-beta.11: plataforma + modelo de cada etapa (começa com o que está em Configurações → Modelos de IA)
     @State private var cleanAI = AIStage.clean.defaultAI.primary
     @State private var variationAI = AIStage.variation.defaultAI.primary
@@ -57,9 +70,25 @@ struct NewJobView: View {
         return ins.isEmpty ? nil : ins
     }
 
+    /// Eixos que o lote vai usar (a lista do cliente; vazia = os 50 do catálogo).
+    private var axesCount: Int {
+        guard let c = client else { return 0 }
+        return c.axes.isEmpty ? ClientProfile.defaultAxes.count : c.axes.count
+    }
+
+    /// Variações por criativo: no teste de eixos, uma por eixo do cliente.
+    private var effectiveVariations: Int { mode == .axisTest ? axesCount : variations }
+
+    private var totalVariations: Int { files.count * effectiveVariations }
+
     private var estimate: CostEstimator.Estimate {
-        CostEstimator.estimate(items: files.count, variations: variations, clean: cleanProvider,
+        CostEstimator.estimate(items: files.count, variations: effectiveVariations, clean: cleanProvider,
                                variation: variationProvider, verifyText: verifyText, settings: settings)
+    }
+
+    private var timeLabel: String {
+        CostEstimator.minutesLabel(CostEstimator.minutes(items: files.count, variations: effectiveVariations, settings: settings,
+                                                         secondsPerImage: speed.snapshots[variationProvider]?.latency))
     }
 
     var body: some View {
@@ -109,8 +138,24 @@ struct NewJobView: View {
                     }
 
                     Section("Processamento") {
-                        Stepper(value: $variations, in: 1...10) {
-                            Text("Variações por criativo: **\(variations)**")
+                        Picker("Modo do lote", selection: $mode) {
+                            ForEach(BatchMode.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        if mode == .normal {
+                            Stepper(value: $variations, in: 1...10) {
+                                Text("Variações por criativo: **\(variations)**")
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Cada criativo passa por **todos os \(axesCount) eixos** do cliente, na ordem da lista (sem rodízio), com uma limpeza só.")
+                                Text(files.count == 1
+                                     ? "1 imagem → \(axesCount) variações. Na revisão e na exportação cada variação leva o número e o nome do eixo, para comparar."
+                                     : "\(files.count) imagens → \(totalVariations) variações. Para comparar os eixos, o ideal é usar 1 imagem.")
+                                    .font(.caption).foregroundStyle(files.count > 1 ? Brand.warning : .secondary)
+                                Text("Para escolher os eixos testados, marque-os em Clientes → Eixos de variação (Catálogo do app ou Meus eixos).")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         LabeledContent("IA da limpeza") {
                             ModelMenu(role: .image, selection: cleanAI) { if let c = $0 { cleanAI = c } }
@@ -146,6 +191,10 @@ struct NewJobView: View {
                             Text(estimate.usd.usd).font(.system(size: 26, weight: .semibold, design: .rounded))
                             Text("\(estimate.imageCalls) imagens geradas · \(estimate.analysisCalls) checagens" + (settings.planningEnabled ? " · \(files.count) planejamentos" : ""))
                                 .font(.caption).foregroundStyle(.secondary)
+                            if !files.isEmpty {
+                                Text("Tempo: \(timeLabel)" + (settings.fastMode ? " · modo rápido com segurança" : " · velocidade original"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         if let k = missingKey {
@@ -155,7 +204,9 @@ struct NewJobView: View {
                             }
                         }
                         Button {
-                            if needsInterpretation { interpret() } else { startJob() }
+                            if needsInterpretation { interpret() }
+                            else if totalVariations > Self.bigBatch { confirmBig = true }
+                            else { startJob() }
                         } label: {
                             Label(needsInterpretation ? "Interpretar instruções" : "Iniciar lote",
                                   systemImage: needsInterpretation ? "text.magnifyingglass" : "play.fill")
@@ -175,6 +226,11 @@ struct NewJobView: View {
             .frame(maxWidth: 860, alignment: .leading)
         }
         .onAppear(perform: loadDefaults)
+        .confirmationDialog("Lote grande: \(totalVariations) variações", isPresented: $confirmBig) {
+            Button("Iniciar (\(estimate.usd.usd), \(timeLabel))") { startJob() }
+        } message: {
+            Text("\(files.count) criativo(s) × \(effectiveVariations) variações. Custo estimado \(estimate.usd.usd) e tempo \(timeLabel). Dá para pausar a qualquer momento sem perder o que já foi feito.")
+        }
         .onChange(of: clientID) { _, _ in
             if let c = client { variations = max(1, c.defaultVariations) }
         }
@@ -202,15 +258,15 @@ struct NewJobView: View {
         guard let client, let folder else { return }
         error = nil
         let jobName = name.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "\(client.name) \(Date().short)" : name
+            ? "\(client.name)\(mode == .axisTest ? " teste de eixos" : "") \(Date().short)" : name
         do {
             let job = try jobs.createJob(name: jobName, client: client, inputFolder: folder, files: files,
                                          variations: variations, cleanProvider: cleanProvider,
                                          variationProvider: variationProvider, analysisProvider: analysisProvider,
                                          sizeMode: metaFormat.sizeMode, format: format, verifyText: verifyText,
-                                         instructions: currentInstructions)
+                                         instructions: currentInstructions, axisTest: mode == .axisTest)
             AppLog.info(.lote, "Lote criado: \(files.count) criativos de \(folder.lastPathComponent).",
-                        details: "Cliente: \(client.name) · \(variations) variações · \(metaFormat.label) \(format.label) · checagem de texto: \(verifyText ? "sim" : "não")"
+                        details: "Cliente: \(client.name) · \(mode == .axisTest ? "teste de eixos: \(job.variationsPerItem) eixos por criativo" : "\(variations) variações") · \(metaFormat.label) \(format.label) · checagem de texto: \(verifyText ? "sim" : "não")"
                             + (job.instructions.map { "\nInstruções: \($0.raw)\n\($0.summary)" } ?? ""),
                         jobID: job.id, jobName: job.name)
             // a escolha do lote vira a principal de cada etapa (a reserva continua a de Configurações)

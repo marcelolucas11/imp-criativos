@@ -76,14 +76,9 @@ struct SettingsView: View {
                         }
                     }
 
+                    SpeedSection()
+
                     Section {
-                        Stepper(value: $settings.maxImageRequests, in: 1...6) {
-                            VStack(alignment: .leading) {
-                                Text("Pedidos de imagem ao mesmo tempo por IA: **\(settings.maxImageRequests)**")
-                                Text("Somando todos os lotes. Menos pedidos = menos erro de IA ocupada (503).")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
                         Stepper(value: $settings.retryAttempts, in: 1...10) {
                             VStack(alignment: .leading) {
                                 Text("Tentativas em erro temporário: **\(settings.retryAttempts)**")
@@ -393,5 +388,56 @@ struct UpdateRow: View {
                 }
             }
         }
+    }
+}
+
+/// 1.0.0-beta.19: velocidade original, Modo rápido com segurança e o estado de cada IA.
+struct SpeedSection: View {
+    @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var speed = SpeedMonitor.shared
+
+    var body: some View {
+        Section {
+            Stepper(value: $settings.maxImageRequests, in: 1...6) {
+                VStack(alignment: .leading) {
+                    Text("Velocidade original: **\(settings.maxImageRequests)** pedidos de imagem ao mesmo tempo por IA")
+                    Text("Somando todos os lotes. É para onde o app volta quando algo indica risco.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Toggle(isOn: $settings.fastMode) {
+                VStack(alignment: .leading) {
+                    Text("Modo rápido com segurança automática")
+                    Text("Sobe um pedido por vez enquanto a IA responde bem. Ao primeiro sinal de risco (IA ocupada, limite de uso, tempo esgotado, IA mais lenta, Mac quente ou lote parado) volta na hora para a velocidade original e só tenta subir de novo depois de 10 minutos (30 se repetir).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Stepper(value: $settings.fastImageCeiling, in: max(1, settings.maxImageRequests)...8) {
+                VStack(alignment: .leading) {
+                    Text("Teto do modo rápido: **\(max(settings.fastImageCeiling, settings.maxImageRequests))** pedidos de imagem ao mesmo tempo por IA")
+                    Text("Limite máximo, mesmo com tudo indo bem. Contas novas na OpenAI costumam ter limite baixo por minuto; o app desce sozinho se bater nele.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .disabled(!settings.fastMode)
+            ForEach(ProviderKind.allCases) { p in
+                if let snap = speed.snapshots[p] {
+                    Label(snap.line, systemImage: snap.inSafeMode ? "shield.lefthalf.filled" : "speedometer")
+                        .font(.caption)
+                        .foregroundStyle(snap.inSafeMode ? Brand.warning : .secondary)
+                }
+            }
+        } header: {
+            Text("Velocidade")
+        } footer: {
+            Text("A velocidade só muda quantos pedidos vão juntos. Modelo, qualidade, prompts, checagens e refações continuam os mesmos, e cada imagem é conferida (abre no Mac e está no disco) antes de contar como pronta. As variações de um mesmo criativo saem em paralelo até esse limite.")
+        }
+        .onChange(of: settings.fastMode) { _, _ in settings.applySpeed() }
+        .onChange(of: settings.fastImageCeiling) { _, _ in settings.applySpeed() }
+        .onChange(of: settings.maxImageRequests) { _, new in
+            if settings.fastImageCeiling < new { settings.fastImageCeiling = new }
+            settings.applySpeed()
+        }
+        .task { settings.applySpeed() }
     }
 }

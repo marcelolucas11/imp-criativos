@@ -30,6 +30,13 @@ final class JobRunner: ObservableObject {
     /// Quanto tempo o modelo de análise que travou fica de lado.
     static let analysisCooldownSeconds: TimeInterval = 5 * 60
 
+    /// 1.0.0-beta.19: vigia de travamento. Último avanço de cada lote (etapas concluídas e quando).
+    private var progressMark: [UUID: (steps: Int, at: Date)] = [:]
+    /// Lote sem nenhuma etapa concluída por este tempo = sinal de travamento (a velocidade volta à original).
+    static let stallSeconds: TimeInterval = 12 * 60
+    /// De quanto em quanto tempo o vigia confere o lote e o Mac.
+    static let watchInterval: UInt64 = 30
+
     init(store: JobStore, settings: AppSettings) {
         self.store = store
         self.settings = settings
@@ -58,7 +65,7 @@ final class JobRunner: ObservableObject {
         store.update(jobID) { $0.state = .running; $0.lastError = nil }
         AppLog.info(.lote, wasStarted ? "Lote retomado." : "Lote iniciado.",
                     details: """
-                    \(job.items.count) criativos · \(job.variationsPerItem) variações cada · saída \(job.sizeMode.label) \(job.format.label)
+                    \(job.items.count) criativos · \(job.variationsPerItem) variações cada\(job.isAxisTest ? " (teste de eixos: todos os eixos do cliente)" : "") · saída \(job.sizeMode.label) \(job.format.label)
                     IA do lote — limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · análise: \(job.analysisProvider.label)
                     \(settings.summary)
                     """,
@@ -186,7 +193,10 @@ final class JobRunner: ObservableObject {
     private func run(_ jobID: UUID) async {
         guard let job = store.job(jobID) else { return }
         let config = ProviderConfig(settings)
-        await ProviderGate.configure(imageLimit: settings.maxImageRequests)
+        await ProviderGate.configure(imageLimit: settings.maxImageRequests, fastCeiling: settings.fastImageCeiling,
+                                     fast: settings.fastMode)
+        await ProviderGate.setMacHold(SpeedMonitor.macRisk())
+        await SpeedMonitor.shared.refresh()
 
         // as plataformas escolhidas no lote são obrigatórias; a reserva de cada etapa só entra se tiver chave
         let required = [job.cleanProvider, job.variationProvider, job.analysisProvider]
@@ -212,12 +222,31 @@ final class JobRunner: ObservableObject {
         }
 
         imageBlocks[jobID] = [:]
+        progressMark[jobID] = (store.job(jobID)?.finishedSteps ?? 0, Date())
+        // 1.0.0-beta.19: vigia do lote — Mac sob pressão ou lote parado devolvem a velocidade original
+        let watchdog = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.watchInterval * 1_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                await self.watch(jobID)
+            }
+        }
+        defer {
+            watchdog.cancel()
+            progressMark[jobID] = nil
+        }
         let workers = max(1, settings.maxConcurrent)
         let rule = FallbackRule(enabled: settings.fallbackEnabled, onBlocked: settings.fallbackOnBlocked)
         let attempts = max(1, settings.retryAttempts)
 
         // repete enquanto aparecer trabalho novo (ex.: "refazer" clicado durante o lote)
         while !Task.isCancelled {
+            // integridade: o que está "pronto" sem a imagem no disco volta para a fila antes de cada rodada
+            let repaired = store.repairMissingFiles(jobID)
+            if repaired > 0, let j = store.job(jobID) {
+                AppLog.warning(.lote, "Integridade: \(repaired) imagem(ns) prontas não estavam no disco e voltaram para a fila.",
+                               jobID: jobID, jobName: j.name)
+            }
             guard let current = store.job(jobID) else { return }
             let pending = current.items.filter { needsWork($0) }.map(\.id)
             if pending.isEmpty { break }
@@ -247,6 +276,45 @@ final class JobRunner: ObservableObject {
             Notifier.post(title: "Lote pronto para revisão",
                           body: "\(finished.name): \(finished.items.count) criativos processados"
                               + (failed > 0 ? ", \(failed) etapa(s) com falha." : "."))
+        }
+    }
+
+    /// 1.0.0-beta.19: vigia do lote, a cada 30 s enquanto ele roda.
+    /// - Mac quente, em pouca energia ou com pouco disco → filas de imagem na velocidade original.
+    /// - Nenhuma etapa concluída em 12 minutos → trata como travamento: velocidade original e modo seguro.
+    /// Não cancela nada; só segura os próximos pedidos.
+    private func watch(_ jobID: UUID) async {
+        await ProviderGate.setMacHold(SpeedMonitor.macRisk())
+        guard let job = store.job(jobID), job.state == .running else { return }
+        let steps = job.finishedSteps
+        let now = Date()
+        guard let mark = progressMark[jobID], mark.steps == steps else {
+            progressMark[jobID] = (steps, now)
+            return
+        }
+        guard now.timeIntervalSince(mark.at) >= Self.stallSeconds else { return }
+        progressMark[jobID] = (steps, now)
+        let minutes = Int(Self.stallSeconds / 60)
+        AppLog.warning(.lote, "Segurança: o lote está há \(minutes) minutos sem concluir nenhuma etapa. A velocidade voltou para a original.",
+                       details: "Os pedidos em andamento continuam (cada um tem tempo limite). Se nada mudar, pause e retome o lote ou veja os erros em Histórico.",
+                       jobID: jobID, jobName: job.name)
+        await ProviderGate.reportStall("lote sem avanço há \(minutes) minutos")
+    }
+
+    /// 1.0.0-beta.19 — integridade: a resposta da IA precisa ser uma imagem que o Mac consegue abrir.
+    /// Se não for, conta como falha temporária (a etapa é refeita com a reserva, se houver).
+    nonisolated static func validImage(_ data: Data) throws -> Data {
+        guard ImageTools.cgImage(from: data) != nil else {
+            throw AIError("A IA devolveu um arquivo que não é uma imagem válida.", kind: .temporary,
+                          details: "\(data.count) bytes recebidos")
+        }
+        return data
+    }
+
+    /// 1.0.0-beta.19 — integridade: a imagem gravada precisa existir e abrir.
+    nonisolated static func verifySaved(_ url: URL) throws {
+        guard ImageTools.pixelSize(of: url) != nil else {
+            throw AIError("A imagem não foi gravada corretamente no disco.", kind: .other, details: url.path)
         }
     }
 
@@ -490,11 +558,14 @@ final class JobRunner: ObservableObject {
                 let chain = config.chain(.clean, prefer: item.cleanProviderOverride ?? job.cleanProvider)
                 let (result, usedModel) = try await withFallback(chain, config: config, rule: rule, ctx: ctx,
                                                                  imageOp: true, explicit: item.cleanProviderOverride != nil) {
-                    try await $0.editImage(upload, prompt: prompt, aspectRatio: aspect)
+                    (provider: AIProvider) async throws -> Data in
+                    let data = try await provider.editImage(upload, prompt: prompt, aspectRatio: aspect)
+                    return try Self.validImage(data)
                 }
                 let rel = "limpos/\(Self.short(itemID))-\(Self.short(UUID())).png"
                 Paths.ensure(folder.appendingPathComponent("limpos", isDirectory: true))
                 try ImageTools.saveGenerated(result, to: folder.appendingPathComponent(rel))
+                try Self.verifySaved(folder.appendingPathComponent(rel))
                 let used = usedModel.provider
                 store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: used) }
                 store.updateItem(jobID, itemID) {
@@ -628,116 +699,159 @@ final class JobRunner: ObservableObject {
             if let warning { ctx.log(.warning, warning) }
         }
 
-        // 3. VARIAÇÕES
+        // 3. VARIAÇÕES — 1.0.0-beta.19: saem juntas, até o limite da fila de imagem da IA
+        // (o Modo rápido com segurança ajusta esse limite). Antes saíam uma de cada vez por criativo.
         guard let ready = store.job(jobID)?.items.first(where: { $0.id == itemID }) else { return }
         let reference = await Task.detached(operation: { ImageTools.uploadJPEG(cleanedURL) }).value
         guard let reference else {
             AppLog.error(.variacao, "Não foi possível ler a imagem limpa para gerar as variações.", jobID: jobID, jobName: job.name, item: name)
             return
         }
-        let aspect = Self.aspect(job.sizeMode, width: ready.pixelWidth, height: ready.pixelHeight)
-        let rules = plan?.variationRules ?? ""
+        let setup = VariationSetup(job: job, item: ready, folder: folder, reference: reference,
+                                   aspect: Self.aspect(job.sizeMode, width: ready.pixelWidth, height: ready.pixelHeight),
+                                   rules: plan?.variationRules ?? "", forbidden: forbidden, extra: extra,
+                                   direction: direction, textChanges: textChanges,
+                                   config: config, rule: rule, attempts: attempts)
+        let pendingVars = ready.variations.filter { $0.status == .pending || $0.status == .running }
+        let gate = ProviderGate.image(job.variationProvider)
+        let analysisChain = config.chain(.analysis, prefer: job.analysisProvider)
 
-        await withTaskGroup(of: Void.self) { group in
-            for v in ready.variations where v.status == .pending || v.status == .running {
-                if Task.isCancelled { return }
-                let varID = v.id
-                store.updateVariation(jobID, itemID, varID) { $0.status = .running; $0.attempts += 1; $0.retryNote = nil; $0.retryAt = nil }
-                let started = Date()
-                let ctx = context(job, ready, step: "Variação v\(v.index) (\(v.axisName))", category: .variacao, attempts: attempts) { [weak self] note, until in
-                    Task { @MainActor in
-                        self?.store.updateVariation(jobID, itemID, varID) {
-                            guard $0.status == .running else { return }
-                            $0.retryNote = note
-                            $0.retryAt = until
-                        }
-                    }
-                }
-                do {
-                    let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
-                    let chain = config.chain(.variation, prefer: v.providerOverride ?? job.variationProvider)
-                    var autoNote: String?
-                    var redosUsed = v.autoRedos ?? 0
-                    var out = cleanedURL
-                    var ocrLeftovers: [String] = []
-                    var used = chain.first?.provider ?? job.variationProvider
-                    var usedLabel = chain.first?.label ?? used.label
+        await BoundedParallel.run(
+            pendingVars,
+            limit: { await gate.currentLimit() },
+            work: { [weak self] v in await self?.generateVariation(v, setup) },
+            followUp: { [weak self] check in
+                // 4. CHECAGEM DO TEXTO — roda junto com as próximas variações, sem ocupar vaga de imagem.
+                // O criativo só termina quando todas as checagens terminam.
+                await self?.checkText(jobID: jobID, itemID: itemID, varID: check.varID, index: check.index, file: check.file,
+                                      transcript: ready.transcript, removeItems: removeItems, forbidden: forbidden,
+                                      ocrLeftovers: check.leftovers, verify: job.verifyText,
+                                      analysisChain: analysisChain, config: config, rule: rule, ctx: check.ctx)
+            })
+    }
 
-                    while true {
-                        let prompt = Prompts.variation(axis: axis, transcript: ready.transcript, extra: extra, direction: direction,
-                                                       textChanges: textChanges, forbidden: forbidden, rules: rules,
-                                                       redoNote: Self.joinNotes(v.redoNote, autoNote))
-                        let (result, usedModel) = try await withFallback(chain, config: config, rule: rule, ctx: ctx,
-                                                                         imageOp: true, explicit: v.providerOverride != nil) {
-                            try await $0.editImage(reference, prompt: prompt, aspectRatio: aspect)
-                        }
-                        let provider = usedModel.provider
-                        used = provider
-                        usedLabel = usedModel.label
-                        let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
-                        Paths.ensure(folder.appendingPathComponent("variacoes", isDirectory: true))
-                        out = folder.appendingPathComponent(rel)
-                        try ImageTools.saveGenerated(result, to: out)
-                        store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: provider) }
-                        store.updateVariation(jobID, itemID, varID) { $0.file = rel }
+    /// Tudo que as variações de um criativo têm em comum.
+    struct VariationSetup {
+        let job: Job
+        let item: JobItem
+        let folder: URL
+        let reference: Data
+        let aspect: String
+        let rules: String
+        let forbidden: [String]
+        let extra: String
+        let direction: String
+        let textChanges: String
+        let config: ProviderConfig
+        let rule: FallbackRule
+        let attempts: Int
+    }
 
-                        // leitura do próprio Mac: termo proibido → refaz sozinho uma vez
-                        let target = out
-                        let ocr = await Task.detached(operation: { LocalOCR.text(at: target) }).value ?? ""
-                        ocrLeftovers = ForbiddenTerms.found(in: ocr, terms: forbidden)
-                        guard !ocrLeftovers.isEmpty, redosUsed < Self.autoRedoLimit, !Task.isCancelled else { break }
-                        redosUsed += 1
-                        let redos = redosUsed
-                        store.updateVariation(jobID, itemID, varID) { $0.autoRedos = redos }
-                        autoNote = "Apareceu: \(ocrLeftovers.joined(separator: ", ")). Não escreva esses termos em nenhum lugar da imagem."
-                        ctx.log(.warning, "termo proibido apareceu (\(ocrLeftovers.joined(separator: ", "))). Refazendo automaticamente.",
-                                details: "Leitura do Mac:\n\(ocr)")
-                        ctx.onStatus?("Refazendo: termo proibido apareceu…", nil)
-                    }
+    /// Variação pronta, esperando a checagem do texto.
+    struct PendingCheck: Sendable {
+        let varID: UUID
+        let index: Int
+        let file: URL
+        let leftovers: [String]
+        let ctx: RequestContext
+    }
 
-                    store.updateVariation(jobID, itemID, varID) {
-                        $0.status = .done
-                        $0.error = nil
-                        $0.errorKind = nil
-                        $0.errorDetails = nil
-                        $0.retryNote = nil
-                        $0.retryAt = nil
-                        $0.providerUsed = used
-                    }
-                    ctx.log(.success, "gerada com \(usedLabel) em \(Self.elapsed(started)).")
-
-                    // 4. CHECAGEM DO TEXTO — 1.0.0-beta.9: roda junto com a próxima variação em vez de segurá-la.
-                    // O criativo só termina quando todas as checagens terminam (o grupo espera).
-                    let finalOut = out
-                    let leftovers = ocrLeftovers
-                    let index = v.index
-                    group.addTask { @MainActor [weak self] in
-                        await self?.checkText(jobID: jobID, itemID: itemID, varID: varID, index: index, file: finalOut,
-                                              transcript: ready.transcript, removeItems: removeItems, forbidden: forbidden,
-                                              ocrLeftovers: leftovers, verify: job.verifyText,
-                                              analysisChain: config.chain(.analysis, prefer: job.analysisProvider),
-                                              config: config, rule: rule, ctx: ctx)
-                    }
-                } catch is CancellationError {
-                    store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
-                    return
-                } catch {
-                    if Task.isCancelled {
-                        store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
-                        return
-                    }
-                    store.updateVariation(jobID, itemID, varID) {
-                        $0.status = .failed
-                        $0.error = error.localizedDescription
-                        $0.errorKind = error.aiKind
-                        $0.errorDetails = error.aiDetails
-                        $0.retryNote = nil
-                        $0.retryAt = nil
-                    }
-                    ctx.log(.error, "falhou — \(error.aiKind.title). \(error.localizedDescription)",
-                            details: [error.aiDetails, "Sugestão: \(error.aiKind.hint)"].compactMap { $0 }.joined(separator: "\n"))
+    /// Gera uma variação (com a refação automática por termo proibido). Devolve a checagem a fazer,
+    /// ou nil se falhou ou foi pausada.
+    private func generateVariation(_ v: Variation, _ s: VariationSetup) async -> PendingCheck? {
+        let job = s.job
+        let jobID = job.id
+        let itemID = s.item.id
+        let varID = v.id
+        if Task.isCancelled { return nil }
+        store.updateVariation(jobID, itemID, varID) { $0.status = .running; $0.attempts += 1; $0.retryNote = nil; $0.retryAt = nil }
+        let started = Date()
+        let ctx = context(job, s.item, step: "Variação v\(v.index) (\(v.axisName))", category: .variacao, attempts: s.attempts) { [weak self] note, until in
+            Task { @MainActor in
+                self?.store.updateVariation(jobID, itemID, varID) {
+                    guard $0.status == .running else { return }
+                    $0.retryNote = note
+                    $0.retryAt = until
                 }
             }
+        }
+        do {
+            let axis = VariationAxis(name: v.axisName, instruction: v.axisInstruction)
+            let chain = s.config.chain(.variation, prefer: v.providerOverride ?? job.variationProvider)
+            var autoNote: String?
+            var redosUsed = v.autoRedos ?? 0
+            var ocrLeftovers: [String] = []
+            var out: URL = s.folder
+            var used = chain.first?.provider ?? job.variationProvider
+            var usedLabel = chain.first?.label ?? used.label
+            let reference = s.reference
+            let aspect = s.aspect
+
+            while true {
+                let prompt = Prompts.variation(axis: axis, transcript: s.item.transcript, extra: s.extra, direction: s.direction,
+                                               textChanges: s.textChanges, forbidden: s.forbidden, rules: s.rules,
+                                               redoNote: Self.joinNotes(v.redoNote, autoNote))
+                let (result, usedModel) = try await withFallback(chain, config: s.config, rule: s.rule, ctx: ctx,
+                                                                 imageOp: true, explicit: v.providerOverride != nil) {
+                    (provider: AIProvider) async throws -> Data in
+                    let data = try await provider.editImage(reference, prompt: prompt, aspectRatio: aspect)
+                    return try Self.validImage(data)
+                }
+                let provider = usedModel.provider
+                used = provider
+                usedLabel = usedModel.label
+                let rel = "variacoes/\(Self.short(itemID))-v\(v.index)-\(Self.short(UUID())).png"
+                Paths.ensure(s.folder.appendingPathComponent("variacoes", isDirectory: true))
+                out = s.folder.appendingPathComponent(rel)
+                try ImageTools.saveGenerated(result, to: out)
+                try Self.verifySaved(out)
+                store.update(jobID) { $0.costUSD += self.settings.imagePrice(for: provider) }
+                store.updateVariation(jobID, itemID, varID) { $0.file = rel }
+
+                // leitura do próprio Mac: termo proibido → refaz sozinho uma vez
+                let target = out
+                let ocr = await Task.detached(operation: { LocalOCR.text(at: target) }).value ?? ""
+                ocrLeftovers = ForbiddenTerms.found(in: ocr, terms: s.forbidden)
+                guard !ocrLeftovers.isEmpty, redosUsed < Self.autoRedoLimit, !Task.isCancelled else { break }
+                redosUsed += 1
+                let redos = redosUsed
+                store.updateVariation(jobID, itemID, varID) { $0.autoRedos = redos }
+                autoNote = "Apareceu: \(ocrLeftovers.joined(separator: ", ")). Não escreva esses termos em nenhum lugar da imagem."
+                ctx.log(.warning, "termo proibido apareceu (\(ocrLeftovers.joined(separator: ", "))). Refazendo automaticamente.",
+                        details: "Leitura do Mac:\n\(ocr)")
+                ctx.onStatus?("Refazendo: termo proibido apareceu…", nil)
+            }
+
+            store.updateVariation(jobID, itemID, varID) {
+                $0.status = .done
+                $0.error = nil
+                $0.errorKind = nil
+                $0.errorDetails = nil
+                $0.retryNote = nil
+                $0.retryAt = nil
+                $0.providerUsed = used
+            }
+            ctx.log(.success, "gerada com \(usedLabel) em \(Self.elapsed(started)).")
+            return PendingCheck(varID: varID, index: v.index, file: out, leftovers: ocrLeftovers, ctx: ctx)
+        } catch is CancellationError {
+            store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
+            return nil
+        } catch {
+            if Task.isCancelled {
+                store.updateVariation(jobID, itemID, varID) { $0.status = .pending; $0.retryNote = nil; $0.retryAt = nil }
+                return nil
+            }
+            store.updateVariation(jobID, itemID, varID) {
+                $0.status = .failed
+                $0.error = error.localizedDescription
+                $0.errorKind = error.aiKind
+                $0.errorDetails = error.aiDetails
+                $0.retryNote = nil
+                $0.retryAt = nil
+            }
+            ctx.log(.error, "falhou — \(error.aiKind.title). \(error.localizedDescription)",
+                    details: [error.aiDetails, "Sugestão: \(error.aiKind.hint)"].compactMap { $0 }.joined(separator: "\n"))
+            return nil
         }
     }
 

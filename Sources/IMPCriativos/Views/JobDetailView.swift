@@ -25,6 +25,7 @@ struct JobDetailView: View {
     @State private var exportedFolder: URL?
     @State private var exporting = false
     @State private var confirmDelete = false
+    @ObservedObject private var speed = SpeedMonitor.shared
 
     var body: some View {
         if let job = jobs.job(jobID) {
@@ -85,7 +86,7 @@ struct JobDetailView: View {
                         Text(job.name).font(.system(size: 22, weight: .bold))
                         StatePill(state: job.state)
                     }
-                    Text("\(job.client.name) · \(job.items.count) criativos · \(job.variationsPerItem) variações · limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · saída: \(job.sizeMode.label) \(job.format.label)")
+                    Text("\(job.client.name) · \(job.items.count) criativos · \(job.variationsPerItem) variações\(job.isAxisTest ? " (teste de eixos)" : "") · limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · saída: \(job.sizeMode.label) \(job.format.label)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -105,6 +106,14 @@ struct JobDetailView: View {
             HStack(spacing: 10) {
                 ProgressView(value: job.progress)
                 Text("\(job.finishedSteps)/\(job.totalSteps)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+
+            // 1.0.0-beta.19: velocidade da IA das variações enquanto o lote roda
+            if job.state == .running, let snap = speed.snapshots[job.variationProvider] {
+                Label(snap.line, systemImage: snap.inSafeMode ? "shield.lefthalf.filled" : "speedometer")
+                    .font(.caption)
+                    .foregroundStyle(snap.inSafeMode ? Brand.warning : .secondary)
+                    .help("Configurações → Velocidade. A velocidade só muda quantos pedidos vão juntos; a qualidade não muda.")
             }
 
             failureSummary(job)
@@ -348,12 +357,12 @@ struct ItemCard: View {
                                 .frame(width: tileWidth, height: tileWidth)
                         } else {
                             ForEach(item.variations) { v in
-                                Tile(title: "v\(v.index) · \(v.axisName)", width: tileWidth,
+                                Tile(title: "v\(v.index) · \(v.axisLabel)", width: tileWidth,
                                      imageURL: v.status == .done ? url(v.file) : nil,
                                      status: v.status, review: v.review,
                                      note: v.retryNote, noteUntil: v.retryAt) {
                                     if let u = url(v.file) {
-                                        preview = PreviewItem(title: "\(item.sourceName) — v\(v.index) (\(v.axisName))",
+                                        preview = PreviewItem(title: "\(item.sourceName) — v\(v.index) (\(v.axisLabel))",
                                                               url: u, compare: url(item.cleanedFile))
                                     }
                                 } footer: {

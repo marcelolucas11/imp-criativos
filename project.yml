@@ -33,3 +33,22 @@ targets:
         DEVELOPMENT_TEAM: ""
         COMBINE_HIDPI_IMAGES: YES
         GENERATE_INFOPLIST_FILE: NO
+    scheme: {}
+  # 1.0.0-beta.19: testes automáticos da lógica de velocidade e do paralelismo (sem abrir o app, sem chamar IA).
+  # Compila só os arquivos puros (Foundation) junto com os testes.
+  IMPCriativosLogicTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/IMPCriativosLogicTests
+      - path: Sources/IMPCriativos/Pipeline/SpeedPolicy.swift
+      - path: Sources/IMPCriativos/Pipeline/BoundedParallel.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.imperaservices.impcriativos.logictests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+    scheme:
+      testTargets: [IMPCriativosLogicTests]

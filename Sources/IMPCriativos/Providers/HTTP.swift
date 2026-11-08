@@ -195,6 +195,8 @@ enum HTTP {
                 }
                 if (200..<300).contains(http.statusCode) {
                     let took = Date().timeIntervalSince(started)
+                    // 1.0.0-beta.19: o Modo rápido com segurança mede o tempo de cada imagem
+                    if let gate { await gate.reportSuccess(seconds: took) }
                     if let gate, !gate.isImage, took > slowTextSeconds {
                         ctx?.log(.info, "\(name) respondeu, mas demorou \(duration(took)).")
                     }
@@ -221,22 +223,28 @@ enum HTTP {
                 // servidor cheio: segura também os outros pedidos para esta IA
                 if let gate, kind == .temporary || kind == .rateLimit {
                     await gate.pause(for: backoff(attempt: attempt, retryAfter: retryAfter) * 0.7)
+                    await gate.reportTrouble("\(shortName) respondeu \(kind == .rateLimit ? "limite de uso" : "ocupado") (HTTP \(http.statusCode))")
                 }
             } catch let e as AIError {
                 if !e.retryable { throw e }
                 lastError = e
+                if let gate { await gate.reportTrouble("\(shortName): \(e.kind.title.lowercased())") }
             } catch is CancellationError {
                 throw CancellationError()
             } catch let e as URLError where e.code == .cancelled {
                 if Task.isCancelled { throw CancellationError() }
                 lastError = timeoutError(name, request, attempt, maxAttempts, timeout, e)
+                if let gate { await gate.reportTrouble("\(shortName) não respondeu a tempo") }
             } catch is DeadlineExceeded {
                 lastError = timeoutError(name, request, attempt, maxAttempts, timeout, nil)
+                if let gate { await gate.reportTrouble("\(shortName) não respondeu em \(duration(timeout))") }
             } catch let e as URLError where e.code == .timedOut {
                 lastError = timeoutError(name, request, attempt, maxAttempts, timeout, e)
+                if let gate { await gate.reportTrouble("\(shortName) não respondeu a tempo") }
             } catch {
                 lastError = AIError("Erro de conexão: \(error.localizedDescription)", kind: .network,
                                     details: "\(name) · \(request.url?.host ?? "") · tentativa \(attempt)/\(maxAttempts)\n\(error)")
+                if let gate { await gate.reportTrouble("falha de conexão com \(shortName)") }
             }
 
             guard attempt < maxAttempts else { break }

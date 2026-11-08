@@ -98,6 +98,13 @@ struct Variation: Codable, Identifiable, Hashable {
     // 1.0.0-beta.7
     /// Quantas vezes o app refez sozinho porque apareceu termo proibido.
     var autoRedos: Int?
+
+    // 1.0.0-beta.19
+    /// Número do eixo no catálogo do app (nil = eixo escrito pelo usuário).
+    var axisNumber: Int?
+
+    /// "27. Título 3D" para eixos do catálogo; só o nome para os eixos do usuário.
+    var axisLabel: String { axisNumber.map { "\($0). \(axisName)" } ?? axisName }
 }
 
 struct JobItem: Codable, Identifiable, Hashable {
@@ -184,6 +191,12 @@ struct Job: Codable, Identifiable, Hashable {
     // 1.0.0-beta.6 (opcional para abrir lotes antigos)
     /// Instruções livres do Novo lote, já separadas em remover / texto / direção.
     var instructions: BatchInstructions?
+
+    // 1.0.0-beta.19 (opcional para abrir lotes antigos)
+    /// Teste de eixos: cada criativo passa por todos os eixos do cliente, na ordem da lista.
+    var axisTest: Bool?
+
+    var isAxisTest: Bool { axisTest ?? false }
 
     /// Lista do cliente + o que as instruções do lote mandam remover.
     var effectiveRemoveItems: [String] {

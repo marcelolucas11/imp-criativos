@@ -40,7 +40,9 @@ enum Exporter {
             }
             for v in item.variations where v.review == .approved {
                 if let f = v.file {
-                    tasks.append((jobFolder.appendingPathComponent(f), "\(base)_v\(v.index).\(ext)", target))
+                    // 1.0.0-beta.19: no teste de eixos, o nome leva o eixo (ex.: _v27_e27-titulo-3d) para comparar depois
+                    let axis = job.isAxisTest ? "_" + (v.axisNumber.map { String(format: "e%02d-", $0) } ?? "") + Paths.slug(v.axisName) : ""
+                    tasks.append((jobFolder.appendingPathComponent(f), "\(base)_v\(v.index)\(axis).\(ext)", target))
                 }
             }
         }
@@ -85,5 +87,28 @@ enum CostEstimator {
         let planning = settings.planningEnabled ? Double(items) * settings.pricePlanning : 0
         let total = cleanCost + varCost + Double(analysis) * settings.priceAnalysis + planning
         return Estimate(imageCalls: items * (1 + variations), analysisCalls: analysis, usd: total)
+    }
+
+    /// 1.0.0-beta.19: tempo estimado em minutos (faixa). Usa o tempo médio por imagem medido nesta sessão,
+    /// ou 45 s se ainda não houver medida. O mínimo considera o modo rápido no teto; o máximo, a velocidade
+    /// original com a IA 50% mais lenta.
+    @MainActor
+    static func minutes(items: Int, variations: Int, settings: AppSettings, secondsPerImage: Double?) -> ClosedRange<Int> {
+        guard items > 0 else { return 0...0 }
+        let lat = max(10, secondsPerImage ?? 45)
+        let base = Double(max(1, settings.maxImageRequests))
+        let top = settings.fastMode ? Double(max(settings.maxImageRequests, settings.fastImageCeiling)) : base
+        let prelude = (settings.planningEnabled ? 40 : 0) + lat + 15
+        let rounds = (Double(items) / Double(max(1, settings.maxConcurrent))).rounded(.up)
+        let images = Double(items * variations)
+        let low = prelude + images * lat / top
+        let high = rounds * prelude + images * lat * 1.5 / base
+        let lo = max(1, Int((low / 60).rounded()))
+        return lo...max(lo, Int((high / 60).rounded(.up)))
+    }
+
+    static func minutesLabel(_ r: ClosedRange<Int>) -> String {
+        func f(_ m: Int) -> String { m < 60 ? "\(m) min" : String(format: "%dh%02d", m / 60, m % 60) }
+        return r.lowerBound == r.upperBound ? "~\(f(r.lowerBound))" : "~\(f(r.lowerBound)) a \(f(r.upperBound))"
     }
 }
