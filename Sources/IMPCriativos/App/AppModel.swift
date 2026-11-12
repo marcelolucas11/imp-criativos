@@ -4,6 +4,8 @@ import Combine
 enum SidebarItem: Hashable {
     case home
     case newJob
+    /// 1.0.0-beta.20: módulo "Limpar logo" (só limpeza, sem variações).
+    case cleanOnly
     case job(UUID)
     case clients
     case logs

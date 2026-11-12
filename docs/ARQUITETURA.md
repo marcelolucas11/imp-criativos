@@ -27,6 +27,14 @@ Pasta de criativos
 [6] EXPORTAÇÃO ──── tamanho original ou fixo, JPG/PNG, nomenclatura cliente_criativo_vN
 ```
 
+**Modos de entrada (beta.20):**
+- **Limpar logo** (`SidebarItem.cleanOnly` → `NewJobView(cleanOnly: true)`; `Job.cleanOnly`): o lote roda só [0]–[2]
+  (planejamento, limpeza, análise com refação automática) e para; `JobItem.variations` fica vazio. Exporta como
+  `cliente_criativo_limpo`, no tamanho original (padrão) ou 4:5 / 9:16. Chaves exigidas: limpeza e análise.
+- **Limpeza desligada** (`Job.skipCleaning`, chave no Novo lote): [1] vira cópia da imagem enviada (`cleanSkipped`,
+  sem custo). A análise continua, mas **não** limpa sozinha: marca encontrada vira só alerta na revisão.
+  "Refazer" na limpeza de uma imagem (`forceClean`) limpa de verdade aquela imagem. Chaves exigidas: variações e análise.
+
 ## Nicho: cassino e bet
 
 O app atende um único nicho: anúncios de **cassino online** e **apostas esportivas (bet)** de operadores autorizados no Brasil

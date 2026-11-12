@@ -65,8 +65,8 @@ final class JobRunner: ObservableObject {
         store.update(jobID) { $0.state = .running; $0.lastError = nil }
         AppLog.info(.lote, wasStarted ? "Lote retomado." : "Lote iniciado.",
                     details: """
-                    \(job.items.count) criativos · \(job.variationsPerItem) variações cada\(job.isAxisTest ? " (teste de eixos: todos os eixos do cliente)" : "") · saída \(job.sizeMode.label) \(job.format.label)
-                    IA do lote — limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · análise: \(job.analysisProvider.label)
+                    \(job.isCleanOnly ? "\(job.items.count) criativos · só limpeza (sem variações)" : "\(job.items.count) criativos · \(job.variationsPerItem) variações cada")\(job.isAxisTest ? " (teste de eixos: todos os eixos do cliente)" : "")\(job.skipsCleaning ? " · limpeza desligada (imagens já limpas)" : "") · saída \(job.sizeMode.label) \(job.format.label)
+                    IA do lote — \(Self.providerSummary(job))
                     \(settings.summary)
                     """,
                     jobID: jobID, jobName: job.name)
@@ -199,7 +199,8 @@ final class JobRunner: ObservableObject {
         await SpeedMonitor.shared.refresh()
 
         // as plataformas escolhidas no lote são obrigatórias; a reserva de cada etapa só entra se tiver chave
-        let required = [job.cleanProvider, job.variationProvider, job.analysisProvider]
+        // 1.0.0-beta.20: só limpeza não usa a IA das variações; limpeza desligada não usa a IA da limpeza
+        let required = Self.requiredProviders(job)
         if let missing = required.first(where: { !APIKeyStore.hasKey($0) }) {
             let msg = "Chave do \(missing.label) não configurada. Vá em Configurações → Chaves de API."
             store.update(jobID) { $0.state = .paused; $0.lastError = msg }
@@ -505,6 +506,39 @@ final class JobRunner: ObservableObject {
         // 1a. NADA A REMOVER (1.0.0-beta.8): o plano disse que a imagem já está limpa → usa o original, sem custo.
         // A análise logo abaixo confere; se ela achar marca, a limpeza é feita normalmente.
         var cleanDone = item.cleanStatus == .done
+
+        // 1b. LIMPEZA DESLIGADA NO LOTE (1.0.0-beta.20): a imagem enviada já vem limpa → vai direto para as variações.
+        // "Refazer" na limpeza (forceClean) continua limpando de verdade aquela imagem.
+        if !cleanDone, job.skipsCleaning, item.forceClean != true {
+            let src = folder.appendingPathComponent(item.originalFile)
+            let rel = "limpos/\(Self.short(itemID))-enviado-\(Self.short(UUID())).png"
+            Paths.ensure(folder.appendingPathComponent("limpos", isDirectory: true))
+            let dst = folder.appendingPathComponent(rel)
+            let ok = await Task.detached(operation: { ImageTools.copyAsPNG(src, to: dst) }).value
+            guard ok else {
+                store.updateItem(jobID, itemID) {
+                    $0.cleanStatus = .failed
+                    $0.cleanError = "Não foi possível ler a imagem enviada."
+                    $0.cleanErrorKind = .other
+                    $0.cleanRetryNote = nil
+                }
+                AppLog.error(.limpeza, "Não foi possível ler a imagem enviada.", jobID: jobID, jobName: job.name, item: name)
+                return
+            }
+            store.updateItem(jobID, itemID) {
+                $0.cleanedFile = rel
+                $0.cleanStatus = .done
+                $0.cleanSkipped = true
+                $0.cleanProviderUsed = nil
+                $0.cleanRetryNote = nil
+                $0.cleanRetryAt = nil
+                $0.analysisDone = false
+            }
+            AppLog.info(.limpeza, "Limpeza desligada no lote: usando a imagem enviada (sem custo).",
+                        jobID: jobID, jobName: job.name, item: name)
+            cleanDone = true
+        }
+
         if !cleanDone, plan?.skipsCleaning == true, item.forceClean != true, (item.cleanRedoNote ?? "").trimmed.isEmpty {
             let src = folder.appendingPathComponent(item.originalFile)
             let rel = "limpos/\(Self.short(itemID))-original-\(Self.short(UUID())).png"
@@ -643,8 +677,11 @@ final class JobRunner: ObservableObject {
             // Conferência por código: termo proibido lido pela IA ou pelo OCR do Mac → refaz sozinho uma vez
             let leftovers = ForbiddenTerms.found(in: aiText + "\n" + ocr, terms: forbidden)
 
+            // 1.0.0-beta.20: limpeza desligada pelo usuário → não limpa sozinho; só avisa na revisão
+            let userSkipped = job.skipsCleaning && cleaned.forceClean != true
+
             // 1.0.0-beta.8: a limpeza foi pulada, mas a checagem achou marca → faz a limpeza de verdade
-            if cleaned.cleanSkipped == true && (!leftovers.isEmpty || !aiWarnings.isEmpty) {
+            if !userSkipped && cleaned.cleanSkipped == true && (!leftovers.isEmpty || !aiWarnings.isEmpty) {
                 let found = (leftovers.isEmpty ? [] : ["termos: " + leftovers.joined(separator: ", ")]) + aiWarnings
                 store.updateItem(jobID, itemID) {
                     $0.cleanSkipped = false
@@ -656,7 +693,7 @@ final class JobRunner: ObservableObject {
                         details: found.joined(separator: "\n"))
                 return
             }
-            if !leftovers.isEmpty && (cleaned.autoCleanRedos ?? 0) < Self.autoRedoLimit {
+            if !userSkipped && !leftovers.isEmpty && (cleaned.autoCleanRedos ?? 0) < Self.autoRedoLimit {
                 let note = "Ainda aparece: \(leftovers.joined(separator: ", ")). Apague esses termos de TODA a imagem, inclusive do título, das telas e das miniaturas, reescrevendo a frase só o necessário."
                 store.updateItem(jobID, itemID) {
                     $0.autoCleanRedos = ($0.autoCleanRedos ?? 0) + 1
@@ -682,7 +719,9 @@ final class JobRunner: ObservableObject {
             }
 
             var warnings = aiWarnings
-            if !leftovers.isEmpty {
+            if userSkipped && !leftovers.isEmpty {
+                warnings.append("Marca na imagem enviada: \(leftovers.joined(separator: ", ")) (limpeza desligada; as variações foram instruídas a não escrever. Use Refazer na limpeza para limpar esta imagem)")
+            } else if !leftovers.isEmpty {
                 warnings.append("Termo proibido no limpo mesmo após refazer: \(leftovers.joined(separator: ", ")) (as variações foram instruídas a não escrever)")
             }
             if changesMissing { warnings.append("Alteração de texto não aplicada no limpo (as variações vão aplicar): \(textChanges.trimmed)") }
@@ -702,6 +741,8 @@ final class JobRunner: ObservableObject {
         // 3. VARIAÇÕES — 1.0.0-beta.19: saem juntas, até o limite da fila de imagem da IA
         // (o Modo rápido com segurança ajusta esse limite). Antes saíam uma de cada vez por criativo.
         guard let ready = store.job(jobID)?.items.first(where: { $0.id == itemID }) else { return }
+        // 1.0.0-beta.20: módulo "Limpar logo" — o criativo termina na limpeza conferida
+        if ready.variations.isEmpty { return }
         let reference = await Task.detached(operation: { ImageTools.uploadJPEG(cleanedURL) }).value
         guard let reference else {
             AppLog.error(.variacao, "Não foi possível ler a imagem limpa para gerar as variações.", jobID: jobID, jobName: job.name, item: name)
@@ -902,8 +943,21 @@ final class JobRunner: ObservableObject {
         return s < 60 ? String(format: "%.0fs", s) : String(format: "%ldmin %02lds", Int(s) / 60, Int(s) % 60)
     }
 
+    /// 1.0.0-beta.20: IAs que o lote realmente usa (a chave delas é obrigatória).
+    static func requiredProviders(_ job: Job) -> [ProviderKind] {
+        if job.isCleanOnly { return [job.cleanProvider, job.analysisProvider] }
+        if job.skipsCleaning { return [job.variationProvider, job.analysisProvider] }
+        return [job.cleanProvider, job.variationProvider, job.analysisProvider]
+    }
+
+    static func providerSummary(_ job: Job) -> String {
+        if job.isCleanOnly { return "limpeza: \(job.cleanProvider.label) · análise: \(job.analysisProvider.label)" }
+        if job.skipsCleaning { return "variações: \(job.variationProvider.label) · análise: \(job.analysisProvider.label)" }
+        return "limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · análise: \(job.analysisProvider.label)"
+    }
+
     /// Proporção pedida à IA: a do tamanho de saída (4:5 ou 9:16), para a imagem já nascer vertical.
-    /// Lotes antigos em "manter original" seguem a proporção de cada criativo.
+    /// Lotes em "manter original" (antigos e o módulo Limpar logo) seguem a proporção de cada criativo.
     static func aspect(_ mode: OutputSizeMode, width: Int, height: Int) -> String {
         switch mode {
         case let .fixed(w, h): return ImageTools.nearestAspectRatio(width: w, height: h)

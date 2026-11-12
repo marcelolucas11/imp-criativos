@@ -27,6 +27,8 @@ Não é um app de uso geral nem para rifas ou sorteios.
 
 1. **Lê uma pasta** de criativos (JPG, PNG, WEBP, HEIC).
 2. **Limpa** cada criativo: remove logo, nome da empresa, @, site, telefone, CNPJ — a lista é editável por cliente.
+   - **Limpar logo** (menu lateral): módulo só de limpeza, para anúncios pegos na Biblioteca de Anúncios. Remove o logo e o nome da empresa, confere e baixa os limpos (`cliente_criativo_limpo.jpg`), no tamanho original ou nos verticais do Meta. Não cria variações.
+   - **Limpeza desligada:** no Novo lote, desligue "Limpar logo e nome antes das variações" quando as imagens já vierem limpas; elas vão direto para as variações, sem custo de limpeza.
 3. **Confere** a limpeza e transcreve o texto do criativo.
 4. **Gera N variações** de cada um, cada uma num **eixo de variação** diferente, mantendo o texto exato. O app já vem com **50 eixos de cassino e bet** ([lista](docs/EIXOS-DE-VARIACAO.md)), usados em rodízio pelos criativos do lote: cada variação sai com cara de peça nova, sem fugir do jogo ou esporte do original.
    - **Teste de eixos:** coloque uma imagem e o app gera uma variação para cada eixo marcado no cliente (até os 50), com o número e o nome do eixo em cada arquivo, para comparar os estilos.

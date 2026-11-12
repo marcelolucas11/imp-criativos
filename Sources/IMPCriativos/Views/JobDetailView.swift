@@ -64,6 +64,16 @@ struct JobDetailView: View {
         }
     }
 
+    /// 1.0.0-beta.20: cabeçalho conforme o modo (só limpeza, limpeza desligada, teste de eixos).
+    static func subtitle(_ job: Job) -> String {
+        let out = "saída: \(job.sizeMode.label) \(job.format.label)"
+        if job.isCleanOnly {
+            return "\(job.client.name) · \(job.items.count) criativos · só limpeza · limpeza: \(job.cleanProvider.label) · \(out)"
+        }
+        let clean = job.skipsCleaning ? "limpeza desligada (imagens já limpas)" : "limpeza: \(job.cleanProvider.label)"
+        return "\(job.client.name) · \(job.items.count) criativos · \(job.variationsPerItem) variações\(job.isAxisTest ? " (teste de eixos)" : "") · \(clean) · variações: \(job.variationProvider.label) · \(out)"
+    }
+
     private func filtered(_ job: Job) -> [JobItem] {
         switch filter {
         case .all: return job.items
@@ -86,7 +96,7 @@ struct JobDetailView: View {
                         Text(job.name).font(.system(size: 22, weight: .bold))
                         StatePill(state: job.state)
                     }
-                    Text("\(job.client.name) · \(job.items.count) criativos · \(job.variationsPerItem) variações\(job.isAxisTest ? " (teste de eixos)" : "") · limpeza: \(job.cleanProvider.label) · variações: \(job.variationProvider.label) · saída: \(job.sizeMode.label) \(job.format.label)")
+                    Text(Self.subtitle(job))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -109,7 +119,7 @@ struct JobDetailView: View {
             }
 
             // 1.0.0-beta.19: velocidade da IA das variações enquanto o lote roda
-            if job.state == .running, let snap = speed.snapshots[job.variationProvider] {
+            if job.state == .running, let snap = speed.snapshots[job.isCleanOnly ? job.cleanProvider : job.variationProvider] {
                 Label(snap.line, systemImage: snap.inSafeMode ? "shield.lefthalf.filled" : "speedometer")
                     .font(.caption)
                     .foregroundStyle(snap.inSafeMode ? Brand.warning : .secondary)
@@ -318,7 +328,7 @@ struct ItemCard: View {
                         } footer: { EmptyView() }
 
                         // LIMPO (v0)
-                        Tile(title: "Limpo · v0", width: tileWidth, imageURL: item.cleanStatus == .done ? url(item.cleanedFile) : nil,
+                        Tile(title: job.isCleanOnly ? "Limpo" : (job.skipsCleaning ? "Enviado · v0" : "Limpo · v0"), width: tileWidth, imageURL: item.cleanStatus == .done ? url(item.cleanedFile) : nil,
                              status: item.cleanStatus, review: item.cleanReview,
                              note: item.cleanRetryNote, noteUntil: item.cleanRetryAt) {
                             if let u = url(item.cleanedFile) {
@@ -335,7 +345,11 @@ struct ItemCard: View {
                             if item.cleanStatus == .done, let used = item.cleanProviderUsed, used != job.cleanProvider {
                                 ProviderUsedLabel(provider: used)
                             }
-                            if item.cleanStatus == .done, item.cleanSkipped == true {
+                            if item.cleanStatus == .done, item.cleanSkipped == true, job.skipsCleaning, item.forceClean != true {
+                                Label("Limpeza desligada · imagem enviada", systemImage: "arrow.right.circle")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .help("Neste lote a limpeza estava desligada: a imagem da pasta foi usada como está. Use \"Refazer\" para limpar esta imagem mesmo assim.")
+                            } else if item.cleanStatus == .done, item.cleanSkipped == true {
                                 Label("Nada a remover · usando o original", systemImage: "checkmark.seal")
                                     .font(.caption).foregroundStyle(.secondary)
                                     .help("O plano não encontrou nada para apagar nesta imagem e a checagem confirmou. Use \"Refazer\" para limpar mesmo assim.")
@@ -349,13 +363,15 @@ struct ItemCard: View {
                             }
                         }
 
-                        Divider().frame(height: tileWidth)
-
-                        // VARIAÇÕES
-                        if item.cleanStatus == .failed {
+                        // VARIAÇÕES (o módulo "Limpar logo" não tem)
+                        if job.isCleanOnly {
+                            EmptyView()
+                        } else if item.cleanStatus == .failed {
+                            Divider().frame(height: tileWidth)
                             Text("Sem variações: a limpeza falhou.").font(.caption).foregroundStyle(.secondary)
                                 .frame(width: tileWidth, height: tileWidth)
                         } else {
+                            Divider().frame(height: tileWidth)
                             ForEach(item.variations) { v in
                                 Tile(title: "v\(v.index) · \(v.axisLabel)", width: tileWidth,
                                      imageURL: v.status == .done ? url(v.file) : nil,

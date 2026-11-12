@@ -28,6 +28,8 @@ struct IMPCriativosApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Novo lote") { model.selection = .newJob }
                     .keyboardShortcut("n", modifiers: .command)
+                Button("Limpar logo") { model.selection = .cleanOnly }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
             }
             CommandGroup(after: .appInfo) {
                 Button("Buscar atualização…") {

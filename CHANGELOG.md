@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## [1.0.0-beta.20] — 2026-11-11
+
+**Módulo "Limpar logo" e opção de desligar a limpeza no lote**
+
+- **Novo módulo "Limpar logo"** no menu lateral (também no Início, na barra de menus e em ⇧⌘L). É só limpeza: escolha o cliente e a pasta com os anúncios (ex.: baixados da Biblioteca de Anúncios) e o app remove o logo e o nome da empresa, sem criar variações. Usa a mesma limpeza do lote normal: planejamento, lista do cliente + o que você pedir nas instruções, checagem pela IA e pela leitura do Mac e refação automática se sobrar marca.
+- Na saída do módulo, o tamanho vem em **"Manter o tamanho original"** (dá para escolher feed 4:5 ou stories 9:16). Os arquivos saem como `cliente_criativo_limpo.jpg`. A estimativa mostra só o custo e o tempo da limpeza, e o lote pede só as chaves da IA da limpeza e da checagem.
+- **Nova chave "Limpar logo e nome antes das variações"** no Novo lote (ligada de fábrica, vale para Normal e Teste de eixos). **Desligada**, as imagens da pasta são tratadas como já limpas e vão direto para as variações, **sem custo de limpeza** (a IA da limpeza some da tela e da estimativa). A checagem ainda lê cada imagem: se achar marca, **só avisa** na revisão, não limpa sozinha. Se quiser limpar uma imagem específica, use "Refazer" no quadro dela.
+- Na revisão, o quadro da imagem mostra "Limpo" no módulo Limpar logo e "Enviado · v0" quando a limpeza estava desligada; o cabeçalho e o Histórico dizem qual modo o lote usou.
+
 ## [1.0.0-beta.19] — 2026-11-08
 
 **Teste de eixos e modo rápido com segurança automática**

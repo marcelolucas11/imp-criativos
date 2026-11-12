@@ -93,14 +93,17 @@ final class JobStore: ObservableObject {
                    format: OutputFormat,
                    verifyText: Bool,
                    instructions: BatchInstructions? = nil,
-                   axisTest: Bool = false) throws -> Job {
+                   axisTest: Bool = false,
+                   cleanOnly: Bool = false,
+                   skipCleaning: Bool = false) throws -> Job {
         let id = UUID()
         let folder = folder(for: id)
         let originals = Paths.ensure(folder.appendingPathComponent("originais", isDirectory: true))
         let axes = client.axes.isEmpty ? ClientProfile.defaultAxes : client.axes
         let rotate = client.rotatesAxes
         // 1.0.0-beta.19: no teste de eixos, cada criativo passa por todos os eixos da lista, na ordem
-        let perItem = axisTest ? axes.count : max(1, variations)
+        // 1.0.0-beta.20: no módulo "Limpar logo" não há variações
+        let perItem = cleanOnly ? 0 : (axisTest ? axes.count : max(1, variations))
 
         var items: [JobItem] = []
         for (n, src) in files.enumerated() {
@@ -137,7 +140,9 @@ final class JobStore: ObservableObject {
                       verifyText: verifyText,
                       items: items,
                       instructions: (instructions?.isEmpty ?? true) ? nil : instructions,
-                      axisTest: axisTest ? true : nil)
+                      axisTest: (axisTest && !cleanOnly) ? true : nil,
+                      cleanOnly: cleanOnly ? true : nil,
+                      skipCleaning: (skipCleaning && !cleanOnly) ? true : nil)
         save(job)
         return job
     }

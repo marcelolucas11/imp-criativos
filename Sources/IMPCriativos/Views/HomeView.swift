@@ -14,6 +14,12 @@ struct HomeView: View {
                 HStack(alignment: .center) {
                     PageHeader(title: "Início", subtitle: "Limpe criativos e gere variações em lote.")
                     Button {
+                        model.selection = .cleanOnly
+                    } label: {
+                        Label("Limpar logo", systemImage: "eraser").padding(.horizontal, 6)
+                    }
+                    .controlSize(.large)
+                    Button {
                         model.selection = .newJob
                     } label: {
                         Label("Novo lote", systemImage: "plus").padding(.horizontal, 6)
@@ -83,7 +89,7 @@ struct RecentJobRow: View {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(job.name).font(.headline)
-                    Text("\(job.client.name) · \(job.items.count) criativos · \(job.variationsPerItem) variações · \(job.createdAt.short)")
+                    Text("\(job.client.name) · \(job.items.count) criativos · \(job.isCleanOnly ? "só limpeza" : "\(job.variationsPerItem) variações") · \(job.createdAt.short)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

@@ -198,6 +198,24 @@ struct Job: Codable, Identifiable, Hashable {
 
     var isAxisTest: Bool { axisTest ?? false }
 
+    // 1.0.0-beta.20 (opcionais para abrir lotes antigos)
+    /// Módulo "Limpar logo": o lote só limpa (sem variações).
+    var cleanOnly: Bool?
+    /// Limpeza desligada no lote: as imagens já vêm limpas e vão direto para as variações.
+    var skipCleaning: Bool?
+
+    var isCleanOnly: Bool { cleanOnly ?? false }
+    var skipsCleaning: Bool { !isCleanOnly && (skipCleaning ?? false) }
+
+    /// "teste de eixos", "só limpeza", "sem limpeza"… para cabeçalhos e registro.
+    var modeLabel: String {
+        if isCleanOnly { return "só limpeza" }
+        var parts: [String] = []
+        if isAxisTest { parts.append("teste de eixos") }
+        if skipsCleaning { parts.append("limpeza desligada") }
+        return parts.joined(separator: " · ")
+    }
+
     /// Lista do cliente + o que as instruções do lote mandam remover.
     var effectiveRemoveItems: [String] {
         var list = client.removeItems

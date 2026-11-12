@@ -1,6 +1,15 @@
 import SwiftUI
 
+/// Novo lote (limpeza + variações) e, desde a 1.0.0-beta.20, o módulo "Limpar logo" (`cleanOnly`):
+/// a mesma tela sem as variações, para limpar anúncios pegos na Biblioteca de Anúncios.
 struct NewJobView: View {
+    /// Módulo "Limpar logo": só limpa o logo e o nome da empresa, sem variações.
+    let cleanOnly: Bool
+
+    init(cleanOnly: Bool = false) {
+        self.cleanOnly = cleanOnly
+    }
+
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var clients: ClientStore
@@ -15,6 +24,10 @@ struct NewJobView: View {
     /// 1.0.0-beta.19: Normal ou Teste de eixos.
     @State private var mode: BatchMode = .normal
     @State private var confirmBig = false
+    /// 1.0.0-beta.20: desliga a limpeza no lote normal (as imagens já vêm limpas).
+    @State private var skipClean = false
+    /// 1.0.0-beta.20: tamanho no módulo "Limpar logo" (nil = manter o tamanho original).
+    @State private var cleanSize: MetaFormat?
     @ObservedObject private var speed = SpeedMonitor.shared
 
     enum BatchMode: String, CaseIterable, Identifiable {
@@ -50,8 +63,21 @@ struct NewJobView: View {
     private var variationProvider: ProviderKind { variationAI.provider }
     private var analysisProvider: ProviderKind { analysisAI.provider }
 
+    /// O lote passa pela limpeza? (Sempre no módulo "Limpar logo"; no lote normal, a menos que seja desligada.)
+    private var cleaning: Bool { cleanOnly || !skipClean }
+
+    /// IAs que este lote vai usar (a chave delas é obrigatória).
+    private var usedProviders: [ProviderKind] {
+        if cleanOnly { return [cleanProvider, analysisProvider] }
+        return (cleaning ? [cleanProvider] : []) + [variationProvider, analysisProvider]
+    }
+
     private var missingKey: ProviderKind? {
-        [cleanProvider, variationProvider, analysisProvider].first { !APIKeyStore.hasKey($0) }
+        usedProviders.first { !APIKeyStore.hasKey($0) }
+    }
+
+    private var sizeMode: OutputSizeMode {
+        cleanOnly ? (cleanSize?.sizeMode ?? .original) : metaFormat.sizeMode
     }
 
     private var hasInstructions: Bool { !instructionsText.trimmed.isEmpty }
@@ -66,7 +92,7 @@ struct NewJobView: View {
         guard hasInstructions, !needsInterpretation else { return nil }
         let remove = removeText.split(whereSeparator: \.isNewline).map { String($0).trimmed }.filter { !$0.isEmpty }
         let ins = BatchInstructions(raw: instructionsText.trimmed, removeItems: remove,
-                                    textChanges: textChangesText.trimmed, direction: directionText.trimmed)
+                                    textChanges: textChangesText.trimmed, direction: cleanOnly ? "" : directionText.trimmed)
         return ins.isEmpty ? nil : ins
     }
 
@@ -77,28 +103,35 @@ struct NewJobView: View {
     }
 
     /// Variações por criativo: no teste de eixos, uma por eixo do cliente.
-    private var effectiveVariations: Int { mode == .axisTest ? axesCount : variations }
+    private var effectiveVariations: Int { cleanOnly ? 0 : (mode == .axisTest ? axesCount : variations) }
 
     private var totalVariations: Int { files.count * effectiveVariations }
 
     private var estimate: CostEstimator.Estimate {
         CostEstimator.estimate(items: files.count, variations: effectiveVariations, clean: cleanProvider,
-                               variation: variationProvider, verifyText: verifyText, settings: settings)
+                               variation: variationProvider, verifyText: verifyText && !cleanOnly, settings: settings,
+                               cleaning: cleaning)
     }
 
     private var timeLabel: String {
         CostEstimator.minutesLabel(CostEstimator.minutes(items: files.count, variations: effectiveVariations, settings: settings,
-                                                         secondsPerImage: speed.snapshots[variationProvider]?.latency))
+                                                         secondsPerImage: speed.snapshots[cleanOnly ? cleanProvider : variationProvider]?.latency,
+                                                         cleaning: cleaning))
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                PageHeader(title: "Novo lote", subtitle: "Escolha o cliente, a pasta dos criativos e como processar.")
+                if cleanOnly {
+                    PageHeader(title: "Limpar logo",
+                               subtitle: "Só remove o logo e o nome da empresa dos anúncios (ex.: pegos na Biblioteca de Anúncios). Não cria variações.")
+                } else {
+                    PageHeader(title: "Novo lote", subtitle: "Escolha o cliente, a pasta dos criativos e como processar.")
+                }
 
                 Form {
                     Section("Lote") {
-                        TextField("Nome do lote", text: $name, prompt: Text("Ex.: Hilux novembro"))
+                        TextField("Nome do lote", text: $name, prompt: Text(cleanOnly ? "Ex.: Biblioteca novembro" : "Ex.: Hilux novembro"))
                         HStack {
                             Picker("Cliente", selection: $clientID) {
                                 Text("Selecione…").tag(UUID?.none)
@@ -137,43 +170,72 @@ struct NewJobView: View {
                         }
                     }
 
-                    Section("Processamento") {
-                        Picker("Modo do lote", selection: $mode) {
-                            ForEach(BatchMode.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        if mode == .normal {
-                            Stepper(value: $variations, in: 1...10) {
-                                Text("Variações por criativo: **\(variations)**")
+                    if cleanOnly {
+                        Section("Limpeza") {
+                            LabeledContent("IA da limpeza") {
+                                ModelMenu(role: .image, selection: cleanAI) { if let c = $0 { cleanAI = c } }
                             }
-                        } else {
+                            LabeledContent("IA das checagens") {
+                                ModelMenu(role: .text, selection: analysisAI) { if let c = $0 { analysisAI = c } }
+                            }
+                            Text("Remove o que está na lista do cliente (logo, nome, @, site…) mais o que você pedir abaixo. Depois, a checagem lê a imagem limpa e, se ainda sobrar marca, refaz a limpeza sozinha uma vez.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Section("Processamento") {
+                            Picker("Modo do lote", selection: $mode) {
+                                ForEach(BatchMode.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            if mode == .normal {
+                                Stepper(value: $variations, in: 1...10) {
+                                    Text("Variações por criativo: **\(variations)**")
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Cada criativo passa por **todos os \(axesCount) eixos** do cliente, na ordem da lista (sem rodízio), com uma limpeza só.")
+                                    Text(files.count == 1
+                                         ? "1 imagem → \(axesCount) variações. Na revisão e na exportação cada variação leva o número e o nome do eixo, para comparar."
+                                         : "\(files.count) imagens → \(totalVariations) variações. Para comparar os eixos, o ideal é usar 1 imagem.")
+                                        .font(.caption).foregroundStyle(files.count > 1 ? Brand.warning : .secondary)
+                                    Text("Para escolher os eixos testados, marque-os em Clientes → Eixos de variação (Catálogo do app ou Meus eixos).")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Cada criativo passa por **todos os \(axesCount) eixos** do cliente, na ordem da lista (sem rodízio), com uma limpeza só.")
-                                Text(files.count == 1
-                                     ? "1 imagem → \(axesCount) variações. Na revisão e na exportação cada variação leva o número e o nome do eixo, para comparar."
-                                     : "\(files.count) imagens → \(totalVariations) variações. Para comparar os eixos, o ideal é usar 1 imagem.")
-                                    .font(.caption).foregroundStyle(files.count > 1 ? Brand.warning : .secondary)
-                                Text("Para escolher os eixos testados, marque-os em Clientes → Eixos de variação (Catálogo do app ou Meus eixos).")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                Toggle("Limpar logo e nome antes das variações", isOn: Binding(get: { !skipClean }, set: { skipClean = !$0 }))
+                                if skipClean {
+                                    Text("Limpeza desligada: as imagens da pasta já vêm limpas e vão direto para as variações, sem custo de limpeza. A checagem ainda lê cada imagem; se achar marca, só avisa na revisão (dá para usar Refazer na limpeza daquela imagem).")
+                                        .font(.caption).foregroundStyle(Brand.warning)
+                                }
                             }
+                            if cleaning {
+                                LabeledContent("IA da limpeza") {
+                                    ModelMenu(role: .image, selection: cleanAI) { if let c = $0 { cleanAI = c } }
+                                }
+                            }
+                            LabeledContent("IA das variações") {
+                                ModelMenu(role: .image, selection: variationAI) { if let c = $0 { variationAI = c } }
+                            }
+                            LabeledContent("IA das checagens") {
+                                ModelMenu(role: .text, selection: analysisAI) { if let c = $0 { analysisAI = c } }
+                            }
+                            Toggle("Conferir o texto de cada variação", isOn: $verifyText)
                         }
-                        LabeledContent("IA da limpeza") {
-                            ModelMenu(role: .image, selection: cleanAI) { if let c = $0 { cleanAI = c } }
-                        }
-                        LabeledContent("IA das variações") {
-                            ModelMenu(role: .image, selection: variationAI) { if let c = $0 { variationAI = c } }
-                        }
-                        LabeledContent("IA das checagens") {
-                            ModelMenu(role: .text, selection: analysisAI) { if let c = $0 { analysisAI = c } }
-                        }
-                        Toggle("Conferir o texto de cada variação", isOn: $verifyText)
                     }
 
                     instructionsSection
 
                     Section("Saída") {
-                        Picker("Tamanho", selection: $metaFormat) {
-                            ForEach(MetaFormat.allCases) { Text($0.label).tag($0) }
+                        if cleanOnly {
+                            Picker("Tamanho", selection: $cleanSize) {
+                                Text("Manter o tamanho original").tag(MetaFormat?.none)
+                                ForEach(MetaFormat.allCases) { Text($0.label).tag(MetaFormat?.some($0)) }
+                            }
+                        } else {
+                            Picker("Tamanho", selection: $metaFormat) {
+                                ForEach(MetaFormat.allCases) { Text($0.label).tag($0) }
+                            }
                         }
                         Picker("Formato", selection: $format) {
                             ForEach(OutputFormat.allCases) { Text($0.label).tag($0) }
@@ -208,7 +270,7 @@ struct NewJobView: View {
                             else if totalVariations > Self.bigBatch { confirmBig = true }
                             else { startJob() }
                         } label: {
-                            Label(needsInterpretation ? "Interpretar instruções" : "Iniciar lote",
+                            Label(needsInterpretation ? "Interpretar instruções" : (cleanOnly ? "Iniciar limpeza" : "Iniciar lote"),
                                   systemImage: needsInterpretation ? "text.magnifyingglass" : "play.fill")
                                 .padding(.horizontal, 8)
                         }
@@ -258,22 +320,26 @@ struct NewJobView: View {
         guard let client, let folder else { return }
         error = nil
         let jobName = name.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "\(client.name)\(mode == .axisTest ? " teste de eixos" : "") \(Date().short)" : name
+            ? "\(client.name)\(cleanOnly ? " limpeza" : (mode == .axisTest ? " teste de eixos" : "")) \(Date().short)" : name
+        let axisTest = !cleanOnly && mode == .axisTest
         do {
             let job = try jobs.createJob(name: jobName, client: client, inputFolder: folder, files: files,
                                          variations: variations, cleanProvider: cleanProvider,
                                          variationProvider: variationProvider, analysisProvider: analysisProvider,
-                                         sizeMode: metaFormat.sizeMode, format: format, verifyText: verifyText,
-                                         instructions: currentInstructions, axisTest: mode == .axisTest)
+                                         sizeMode: sizeMode, format: format, verifyText: verifyText && !cleanOnly,
+                                         instructions: currentInstructions, axisTest: axisTest,
+                                         cleanOnly: cleanOnly, skipCleaning: !cleanOnly && skipClean)
             AppLog.info(.lote, "Lote criado: \(files.count) criativos de \(folder.lastPathComponent).",
-                        details: "Cliente: \(client.name) · \(mode == .axisTest ? "teste de eixos: \(job.variationsPerItem) eixos por criativo" : "\(variations) variações") · \(metaFormat.label) \(format.label) · checagem de texto: \(verifyText ? "sim" : "não")"
+                        details: "Cliente: \(client.name) · \(cleanOnly ? "só limpeza (módulo Limpar logo)" : (axisTest ? "teste de eixos: \(job.variationsPerItem) eixos por criativo" : "\(variations) variações")) · \(cleaning ? "limpeza ligada" : "limpeza desligada (imagens já limpas)") · \(sizeMode.label) \(format.label)" + (cleanOnly ? "" : " · checagem de texto: \(verifyText ? "sim" : "não")")
                             + (job.instructions.map { "\nInstruções: \($0.raw)\n\($0.summary)" } ?? ""),
                         jobID: job.id, jobName: job.name)
             // a escolha do lote vira a principal de cada etapa (a reserva continua a de Configurações)
-            settings.adoptForBatch(cleanAI, for: .clean)
-            settings.adoptForBatch(variationAI, for: .variation)
+            if cleaning { settings.adoptForBatch(cleanAI, for: .clean) }
+            if !cleanOnly {
+                settings.adoptForBatch(variationAI, for: .variation)
+                settings.defaultFormat = metaFormat
+            }
             settings.adoptForBatch(analysisAI, for: .analysis)
-            settings.defaultFormat = metaFormat
             runner.start(job.id)
             model.selection = .job(job.id)
             // limpa o formulário para o próximo lote
@@ -300,7 +366,8 @@ struct NewJobView: View {
                         .padding(6)
                         .frame(minHeight: 70, maxHeight: 140)
                     if instructionsText.isEmpty {
-                        Text("Ex.: tirar todo nome Aviator, tirar o nome X, adicionar o nome Y no topo, criar ângulos bem diferentes e variados")
+                        Text(cleanOnly ? "Ex.: tirar também o nome Aviator e o selo do canto"
+                                       : "Ex.: tirar todo nome Aviator, tirar o nome X, adicionar o nome Y no topo, criar ângulos bem diferentes e variados")
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 11).padding(.vertical, 6)
                             .allowsHitTesting(false)
@@ -349,8 +416,10 @@ struct NewJobView: View {
                                      prompt: "Um item por linha. Ex.: Nome Aviator (em qualquer lugar)", lines: 1...5)
                     instructionField("Alterar o texto dos criativos", text: $textChangesText,
                                      prompt: "Ex.: incluir o nome \"Nome Novo\" no topo", lines: 1...3)
-                    instructionField("Direção das variações", text: $directionText,
-                                     prompt: "Ex.: ângulos bem diferentes e variados", lines: 1...3)
+                    if !cleanOnly {
+                        instructionField("Direção das variações", text: $directionText,
+                                         prompt: "Ex.: ângulos bem diferentes e variados", lines: 1...3)
+                    }
                     if let interpretNote { WarningLabel(text: interpretNote) }
                 } else if needsInterpretation && interpretedRaw != nil {
                     WarningLabel(text: "O texto mudou. Clique em Interpretar de novo.")
@@ -360,7 +429,9 @@ struct NewJobView: View {
         } header: {
             Text("Instruções para este lote (opcional)")
         } footer: {
-            Text("Valem só para este lote, somadas ao perfil do cliente. O que for para remover entra na limpeza e nas checagens; alterações de texto viram o texto esperado das variações; o resto orienta as variações.")
+            Text(cleanOnly
+                 ? "Valem só para esta limpeza, somadas à lista do cliente. O que for para remover entra na limpeza e na checagem."
+                 : "Valem só para este lote, somadas ao perfil do cliente. O que for para remover entra na limpeza e nas checagens; alterações de texto viram o texto esperado das variações; o resto orienta as variações.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

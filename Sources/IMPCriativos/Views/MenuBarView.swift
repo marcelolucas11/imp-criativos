@@ -36,6 +36,7 @@ struct MenuBarView: View {
         Button("Abrir IMP Criativos") { open(model.selection ?? .home) }
             .keyboardShortcut("o")
         Button("Novo lote") { open(.newJob) }
+        Button("Limpar logo") { open(.cleanOnly) }
         if !active.isEmpty {
             Button("Pausar todos os lotes") { runner.pauseAll() }
         }

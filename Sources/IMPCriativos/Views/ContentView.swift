@@ -12,6 +12,7 @@ struct ContentView: View {
                 Section {
                     NavigationLink(value: SidebarItem.home) { Label("Início", systemImage: "house") }
                     NavigationLink(value: SidebarItem.newJob) { Label("Novo lote", systemImage: "plus.square.on.square") }
+                    NavigationLink(value: SidebarItem.cleanOnly) { Label("Limpar logo", systemImage: "eraser") }
                     NavigationLink(value: SidebarItem.clients) { Label("Clientes", systemImage: "person.2") }
                     NavigationLink(value: SidebarItem.logs) {
                         Label("Histórico", systemImage: "list.bullet.rectangle")
@@ -40,7 +41,8 @@ struct ContentView: View {
             Group {
                 switch model.selection ?? .home {
                 case .home: HomeView()
-                case .newJob: NewJobView()
+                case .newJob: NewJobView().id("novo-lote")
+                case .cleanOnly: NewJobView(cleanOnly: true).id("limpar-logo")
                 case let .job(id): JobDetailView(jobID: id)
                 case .clients: ClientsView()
                 case .logs: LogsView()

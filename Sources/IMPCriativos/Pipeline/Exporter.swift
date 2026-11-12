@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 /// Exporta os aprovados no tamanho e formato escolhidos, com nomenclatura padrão:
 ///   <pasta>/<cliente>/<lote>_<data>/<cliente>_<criativo>_v0.jpg   (limpo)
 ///   <pasta>/<cliente>/<lote>_<data>/<cliente>_<criativo>_v1.jpg   (variações)
+///   <pasta>/<cliente>/<lote>_<data>/<cliente>_<criativo>_limpo.jpg (módulo Limpar logo)
 enum Exporter {
     struct Result {
         let folder: URL
@@ -36,7 +37,8 @@ enum Exporter {
             }
             let base = "\(clientSlug)_\(Paths.slug(item.baseName))"
             if item.cleanReview == .approved, let f = item.cleanedFile {
-                tasks.append((jobFolder.appendingPathComponent(f), "\(base)_v0.\(ext)", target))
+                // 1.0.0-beta.20: no módulo "Limpar logo" o arquivo sai como _limpo
+                tasks.append((jobFolder.appendingPathComponent(f), "\(base)_\(job.isCleanOnly ? "limpo" : "v0").\(ext)", target))
             }
             for v in item.variations where v.review == .approved {
                 if let f = v.file {
@@ -80,28 +82,31 @@ enum CostEstimator {
 
     @MainActor
     static func estimate(items: Int, variations: Int, clean: ProviderKind, variation: ProviderKind,
-                         verifyText: Bool, settings: AppSettings) -> Estimate {
-        let cleanCost = Double(items) * settings.imagePrice(for: clean)
+                         verifyText: Bool, settings: AppSettings, cleaning: Bool = true) -> Estimate {
+        // 1.0.0-beta.20: com a limpeza desligada no lote, a imagem enviada é usada como está (sem custo de limpeza)
+        let cleanCost = cleaning ? Double(items) * settings.imagePrice(for: clean) : 0
         let varCost = Double(items * variations) * settings.imagePrice(for: variation)
         let analysis = items + (verifyText ? items * variations : 0)
         let planning = settings.planningEnabled ? Double(items) * settings.pricePlanning : 0
         let total = cleanCost + varCost + Double(analysis) * settings.priceAnalysis + planning
-        return Estimate(imageCalls: items * (1 + variations), analysisCalls: analysis, usd: total)
+        return Estimate(imageCalls: items * ((cleaning ? 1 : 0) + variations), analysisCalls: analysis, usd: total)
     }
 
     /// 1.0.0-beta.19: tempo estimado em minutos (faixa). Usa o tempo médio por imagem medido nesta sessão,
     /// ou 45 s se ainda não houver medida. O mínimo considera o modo rápido no teto; o máximo, a velocidade
     /// original com a IA 50% mais lenta.
     @MainActor
-    static func minutes(items: Int, variations: Int, settings: AppSettings, secondsPerImage: Double?) -> ClosedRange<Int> {
+    static func minutes(items: Int, variations: Int, settings: AppSettings, secondsPerImage: Double?,
+                        cleaning: Bool = true) -> ClosedRange<Int> {
         guard items > 0 else { return 0...0 }
         let lat = max(10, secondsPerImage ?? 45)
         let base = Double(max(1, settings.maxImageRequests))
         let top = settings.fastMode ? Double(max(settings.maxImageRequests, settings.fastImageCeiling)) : base
-        let prelude = (settings.planningEnabled ? 40 : 0) + lat + 15
+        let prelude = (settings.planningEnabled ? 40 : 0) + (cleaning ? lat : 0) + 15
         let rounds = (Double(items) / Double(max(1, settings.maxConcurrent))).rounded(.up)
         let images = Double(items * variations)
-        let low = prelude + images * lat / top
+        // 1.0.0-beta.20: só limpeza — o tempo é o das rodadas de limpeza (os criativos rodam em paralelo)
+        let low = variations == 0 ? rounds * prelude * 0.7 : prelude + images * lat / top
         let high = rounds * prelude + images * lat * 1.5 / base
         let lo = max(1, Int((low / 60).rounded()))
         return lo...max(lo, Int((high / 60).rounded(.up)))
