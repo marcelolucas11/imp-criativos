@@ -314,6 +314,194 @@ extension StoryAdjustments {
     }
 }
 
+// MARK: - Texturas, linhas e bordas (beta.23)
+
+/// Direção das linhas diagonais. `random` sorteia \, / ou X por imagem.
+enum StoryLineDirection: String, CaseIterable, Identifiable, Codable {
+    case backslash
+    case slash
+    case cross
+    case random
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .backslash: return "Diagonal esquerda (\\)"
+        case .slash: return "Diagonal direita (/)"
+        case .cross: return "Cruzada (X)"
+        case .random: return "Aleatória por imagem"
+        }
+    }
+}
+
+/// Modo de mistura das linhas com a imagem.
+enum StoryLineBlend: String, CaseIterable, Identifiable, Codable {
+    case overlay
+    case multiply
+    case softLight
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .overlay: return "Overlay"
+        case .multiply: return "Multiply"
+        case .softLight: return "Soft-light"
+        }
+    }
+}
+
+enum StoryTexturePreset: String, CaseIterable, Identifiable, Codable {
+    case off
+    case subtle
+    case balanced
+    case intense
+    case custom
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .off: return "Desligado"
+        case .subtle: return "Sutil"
+        case .balanced: return "Equilibrado"
+        case .intense: return "Intenso"
+        case .custom: return "Personalizado"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .off: return "Sem linhas, serrilhado, aberração nem bloom."
+        case .subtle: return "Linhas leves, micro-aberração e serrilhado mínimo. O texto continua limpo."
+        case .balanced: return "Linhas diagonais visíveis, serrilhado moderado e deslocamento RGB médio."
+        case .intense: return "Linhas marcadas, serrilhado alto, aberração cromática e bloom fortes. Confira o texto no zoom antes de processar o lote."
+        case .custom: return "Uma chave e um slider (0 a 100%) para cada efeito."
+        }
+    }
+}
+
+/// Efeitos de textura e estilização das bordas. Cada um liga e desliga sozinho; os sliders vão de 0 a 100%.
+/// O nível é o máximo: cada imagem sorteia entre 70% e 100% dele (a direção "aleatória" das linhas também é sorteada).
+struct StoryTexture: Codable, Equatable {
+    /// Linhas diagonais por cima da imagem (pixel exato, sem reamostragem).
+    var lines = false
+    var lineDirection: StoryLineDirection = .random
+    /// Opacidade (0–100%). 100% = linhas bem marcadas, mas nunca pretas por inteiro (teto de 85%).
+    var lineOpacityPercent = 40.0
+    var lineSpacing = 6.0
+    var lineThickness = 1.0
+    var lineBlend: StoryLineBlend = .overlay
+    /// Serrilhado: quebra o anti-aliasing só nas bordas de alto contraste (texto, botões).
+    var jitter = false
+    var jitterPercent = 40.0
+    /// Aberração cromática: R e B andam em sentidos opostos (1px a 6px conforme o nível).
+    var aberration = false
+    var aberrationPercent = 40.0
+    /// Ofuscação: bloom nas luzes + micro-desfoque direcional (do levemente estilizado ao quase ilegível).
+    var bloom = false
+    var bloomPercent = 30.0
+
+    static let percentRange: ClosedRange<Double> = 0...100
+    static let spacingRange: ClosedRange<Double> = 2...12
+    static let thicknessRange: ClosedRange<Double> = 1...3
+    static let aberrationMaxPixels = 6
+    /// Teto da opacidade das linhas (a leitura do texto não some mesmo com o slider em 100%).
+    static let lineOpacityCap = 0.85
+
+    static let none = StoryTexture()
+
+    var isActive: Bool {
+        (lines && lineOpacityPercent > 0) || (jitter && jitterPercent > 0)
+            || (aberration && aberrationPercent > 0) || (bloom && bloomPercent > 0)
+    }
+
+    /// Sutil: linhas leves + micro-aberração + serrilhado mínimo.
+    static let subtle: StoryTexture = {
+        var t = StoryTexture()
+        t.lines = true
+        t.lineDirection = .random
+        t.lineOpacityPercent = 15
+        t.lineSpacing = 8
+        t.lineThickness = 1
+        t.lineBlend = .softLight
+        t.jitter = true
+        t.jitterPercent = 15
+        t.aberration = true
+        t.aberrationPercent = 15
+        return t
+    }()
+
+    /// Equilibrado: linhas visíveis + serrilhado moderado + deslocamento RGB médio.
+    static let balanced: StoryTexture = {
+        var t = StoryTexture()
+        t.lines = true
+        t.lineDirection = .random
+        t.lineOpacityPercent = 40
+        t.lineSpacing = 5
+        t.lineThickness = 1
+        t.lineBlend = .overlay
+        t.jitter = true
+        t.jitterPercent = 45
+        t.aberration = true
+        t.aberrationPercent = 45
+        return t
+    }()
+
+    /// Intenso: linhas marcadas + serrilhado alto + aberração e bloom fortes.
+    static let intense: StoryTexture = {
+        var t = StoryTexture()
+        t.lines = true
+        t.lineDirection = .cross
+        t.lineOpacityPercent = 70
+        t.lineSpacing = 4
+        t.lineThickness = 2
+        t.lineBlend = .overlay
+        t.jitter = true
+        t.jitterPercent = 80
+        t.aberration = true
+        t.aberrationPercent = 80
+        t.bloom = true
+        t.bloomPercent = 70
+        return t
+    }()
+
+    /// Mantém tudo dentro dos limites e a espessura menor que o espaçamento (senão não sobra intervalo entre as linhas).
+    func clamped() -> StoryTexture {
+        func c(_ v: Double, _ r: ClosedRange<Double>) -> Double { v.isFinite ? min(max(v, r.lowerBound), r.upperBound) : r.lowerBound }
+        var t = self
+        t.lineOpacityPercent = c(lineOpacityPercent, Self.percentRange)
+        t.lineSpacing = c(lineSpacing, Self.spacingRange).rounded()
+        t.lineThickness = min(c(lineThickness, Self.thicknessRange).rounded(), t.lineSpacing - 1)
+        t.jitterPercent = c(jitterPercent, Self.percentRange)
+        t.aberrationPercent = c(aberrationPercent, Self.percentRange)
+        t.bloomPercent = c(bloomPercent, Self.percentRange)
+        return t
+    }
+
+    /// Leitura tolerante: chave nova ou ausente nunca derruba o que já estava salvo.
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func v<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
+        lines = v(.lines, lines)
+        lineDirection = v(.lineDirection, lineDirection)
+        lineOpacityPercent = v(.lineOpacityPercent, lineOpacityPercent)
+        lineSpacing = v(.lineSpacing, lineSpacing)
+        lineThickness = v(.lineThickness, lineThickness)
+        lineBlend = v(.lineBlend, lineBlend)
+        jitter = v(.jitter, jitter)
+        jitterPercent = v(.jitterPercent, jitterPercent)
+        aberration = v(.aberration, aberration)
+        aberrationPercent = v(.aberrationPercent, aberrationPercent)
+        bloom = v(.bloom, bloom)
+        bloomPercent = v(.bloomPercent, bloomPercent)
+    }
+}
+
 /// Tudo o que a tela do Otimizador escolhe. Fica salvo entre aberturas do app.
 struct StoryOptions: Codable, Equatable {
     var fit: StoryFit = .blurFit
@@ -329,6 +517,10 @@ struct StoryOptions: Codable, Equatable {
     var prefix = "story"
     /// 1.0.0-beta.22: quantas versões diferentes sair de cada imagem (1 a 10).
     var versionsPerImage = 1
+    /// 1.0.0-beta.23: texturas, linhas e bordas (desligado de fábrica: quem já usa o app não vê mudança).
+    var texturePreset: StoryTexturePreset = .off
+    /// Valores do modo Personalizado das texturas (começa na cópia do preset que estava em uso).
+    var customTexture: StoryTexture = .balanced
 
     static let versionsRange: ClosedRange<Int> = 1...10
 
@@ -347,6 +539,26 @@ struct StoryOptions: Codable, Equatable {
         }
     }
 
+    /// Efeitos de textura em vigor, conforme o preset escolhido.
+    var texture: StoryTexture {
+        switch texturePreset {
+        case .off: return .none
+        case .subtle: return .subtle
+        case .balanced: return .balanced
+        case .intense: return .intense
+        case .custom: return customTexture.clamped()
+        }
+    }
+
+    /// Troca o preset de texturas. Ao entrar no Personalizado, os sliders partem do que estava valendo
+    /// (se estava desligado, parte do Equilibrado) em vez de pular para valores soltos.
+    mutating func selectTexturePreset(_ preset: StoryTexturePreset) {
+        if preset == .custom, texturePreset != .custom {
+            customTexture = texturePreset == .off ? .balanced : texture
+        }
+        texturePreset = preset
+    }
+
     // Leitura tolerante: campos novos em versões futuras não apagam o que já estava salvo.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -361,6 +573,8 @@ struct StoryOptions: Codable, Equatable {
         naming = (try? c.decodeIfPresent(StoryNaming.self, forKey: .naming)) ?? d.naming
         prefix = (try? c.decodeIfPresent(String.self, forKey: .prefix)) ?? d.prefix
         versionsPerImage = (try? c.decodeIfPresent(Int.self, forKey: .versionsPerImage)) ?? d.versionsPerImage
+        texturePreset = (try? c.decodeIfPresent(StoryTexturePreset.self, forKey: .texturePreset)) ?? d.texturePreset
+        customTexture = (try? c.decodeIfPresent(StoryTexture.self, forKey: .customTexture)) ?? d.customTexture
     }
 }
 
@@ -416,6 +630,23 @@ struct StoryParams: Equatable {
     var diagonalPhase = 0
     /// 1.0.0-beta.22: vinheta — fração da escala somada nos cantos (− escurece, + clareia).
     var vignette: Double = 0
+    /// 1.0.0-beta.23: linhas diagonais (opacidade 0–1 já com o teto aplicado; 0 = desligado). A direção nunca é `random` aqui:
+    /// o sorteio já escolheu \, / ou X para esta imagem.
+    var lineOpacity: Double = 0
+    var lineSpacing = 6
+    var lineThickness = 1
+    var lineDirection: StoryLineDirection = .backslash
+    var lineBlend: StoryLineBlend = .overlay
+    var linePhase = 0
+    /// 1.0.0-beta.23: serrilhado das bordas (nível 0–1; 0 = desligado) e semente do jitter de linhas/colunas.
+    var jitterLevel: Double = 0
+    var jitterSeed: UInt64 = 0
+    /// 1.0.0-beta.23: aberração cromática — R anda (+dx, +dy) e B anda (−dx, −dy). 0 = desligado.
+    var aberrationDX = 0
+    var aberrationDY = 0
+    /// 1.0.0-beta.23: ofuscação (bloom + micro-desfoque direcional), nível 0–1, e ângulo do desfoque em radianos.
+    var bloomLevel: Double = 0
+    var blurAngle: Double = 0
     var quality = 90
     var progressive = false
     var chroma444 = false
@@ -452,6 +683,14 @@ struct StoryParams: Equatable {
         let chromaTwo = unit() < 0.5
         let diagU = unit(), diagFour = unit() < 0.5, diagAnti = unit() < 0.5, diagPhaseU = unit()
         let vig = sym(a.vignetteMaxPercent / 100)
+        // 1.0.0-beta.23: texturas — sorteios novos no fim da sequência (a semente de antes continua dando os mesmos valores acima)
+        let t = options.texture
+        let lineDirU = unit(), linePhaseU = unit()
+        let lineLevelU = unit(), jitterLevelU = unit(), aberrationLevelU = unit(), bloomLevelU = unit()
+        let aberrationAngleU = unit(), blurAngleU = unit()
+        let jitterSeed = rng.next()
+        /// 70% a 100% do nível escolhido.
+        func level(_ percent: Double, _ u: Double) -> Double { percent / 100 * (0.7 + 0.3 * u) }
 
         var p = StoryParams()
         p.code = code
@@ -506,10 +745,59 @@ struct StoryParams: Equatable {
             p.diagonalPhase = Int(diagPhaseU * Double(p.diagonalPeriod)) % p.diagonalPeriod
         }
         if a.vignette { p.vignette = vig }
+        if t.lines, t.lineOpacityPercent > 0 {
+            p.lineOpacity = level(t.lineOpacityPercent, lineLevelU) * StoryTexture.lineOpacityCap
+            p.lineSpacing = Int(t.lineSpacing)
+            p.lineThickness = max(1, min(Int(t.lineThickness), p.lineSpacing - 1))
+            p.lineBlend = t.lineBlend
+            switch t.lineDirection {
+            case .backslash, .slash, .cross: p.lineDirection = t.lineDirection
+            case .random:
+                let choices: [StoryLineDirection] = [.backslash, .slash, .cross]
+                p.lineDirection = choices[min(2, Int(lineDirU * 3))]
+            }
+            p.linePhase = min(p.lineSpacing - 1, Int(linePhaseU * Double(p.lineSpacing)))
+        }
+        if t.jitter, t.jitterPercent > 0 {
+            p.jitterLevel = level(t.jitterPercent, jitterLevelU)
+            p.jitterSeed = jitterSeed
+        }
+        if t.aberration, t.aberrationPercent > 0 {
+            let l = level(t.aberrationPercent, aberrationLevelU)
+            let px = max(1, Int((1 + Double(StoryTexture.aberrationMaxPixels - 1) * l).rounded()))
+            let angle = aberrationAngleU * Double.pi
+            var dx = Int((Double(px) * cos(angle)).rounded()), dy = Int((Double(px) * sin(angle)).rounded())
+            if dx == 0 && dy == 0 { dx = px }
+            p.aberrationDX = dx
+            p.aberrationDY = dy
+        }
+        if t.bloom, t.bloomPercent > 0 {
+            p.bloomLevel = level(t.bloomPercent, bloomLevelU)
+            p.blurAngle = blurAngleU * Double.pi
+        }
         if a.jpegVariation, options.format == .jpg {
             p.progressive = prog
             p.chroma444 = c444
         }
+        return p
+    }
+
+    /// Há alguma etapa que roda sobre os pixels já desenhados (serrilhado e linhas)?
+    var needsRasterPass: Bool { jitterLevel > 0 || lineOpacity > 0 }
+
+    /// Algum efeito de textura (linhas, serrilhado, aberração ou ofuscação) está ligado nesta imagem?
+    var hasTexture: Bool {
+        needsRasterPass || aberrationDX != 0 || aberrationDY != 0 || bloomLevel > 0
+    }
+
+    /// Cópia sem nenhum efeito de textura (para comparar "com" e "sem" no modal de inspeção).
+    var withoutTexture: StoryParams {
+        var p = self
+        p.lineOpacity = 0
+        p.jitterLevel = 0
+        p.aberrationDX = 0
+        p.aberrationDY = 0
+        p.bloomLevel = 0
         return p
     }
 
@@ -549,6 +837,18 @@ struct StoryParams: Equatable {
             parts.append("riscos " + (diagonalAnti ? "/" : "\\") + String(format: " ±%.1f (período %d)", diagonalAmplitude, diagonalPeriod))
         }
         if vignette != 0 { parts.append(String(format: "vinheta %+.1f%%", vignette * 100)) }
+        if lineOpacity > 0 {
+            let dir: String
+            switch lineDirection {
+            case .backslash: dir = "\\"
+            case .slash: dir = "/"
+            default: dir = "X"
+            }
+            parts.append("linhas \(dir) \(lineSpacing)px/\(lineThickness)px \(lineBlend.label.lowercased()) " + String(format: "%.0f%%", lineOpacity * 100))
+        }
+        if jitterLevel > 0 { parts.append(String(format: "serrilhado %.0f%%", jitterLevel * 100)) }
+        if aberrationDX != 0 || aberrationDY != 0 { parts.append("aberração RGB \(aberrationDX),\(aberrationDY)px") }
+        if bloomLevel > 0 { parts.append(String(format: "ofuscação %.0f%%", bloomLevel * 100)) }
         if mirror { parts.append("espelhado") }
         parts.append("q\(quality)\(progressive ? " progressivo" : "")\(chroma444 ? " 4:4:4" : " 4:2:0")")
         return parts.joined(separator: " · ")

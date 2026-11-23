@@ -12,8 +12,12 @@ import CTurboJPEG
 /// Ordem por imagem:
 ///   leitura (orientação EXIF aplicada, maior lado até 4096 px) → espelho (opcional) → enquadramento 9:16
 ///   → micro-recorte/rotação → micro-perspectiva → brilho/contraste/saturação → temperatura → nitidez ou suavização
-///   → deslocamento de canal → granulação → riscos diagonais → vinheta → micro-ruído
-///   → pixels novos em sRGB → JPEG (libjpeg-turbo) ou PNG (ImageIO), sem metadados.
+///   → deslocamento de canal → granulação → riscos diagonais → vinheta → aberração cromática RGB → bloom/ofuscação
+///   → micro-ruído → pixels novos em sRGB → serrilhado das bordas → linhas diagonais (na CPU, pixel exato)
+///   → JPEG (libjpeg-turbo) ou PNG (ImageIO), sem metadados.
+///
+/// 1.0.0-beta.23: o serrilhado e as linhas rodam depois de desenhar os pixels (ver StoryTextureEffects) e nessa ordem de
+/// propósito: as linhas, sendo de alto contraste, seriam tratadas como borda se entrassem antes do serrilhado.
 ///
 /// Os metadados somem porque a imagem é redesenhada do zero num buffer novo: EXIF, IPTC, XMP, GPS, comentários
 /// e perfis de cor antigos não passam para o arquivo. Só entra um perfil sRGB limpo, para as cores não mudarem.
@@ -239,6 +243,40 @@ enum StoryOptimizer {
             }
         }
 
+        // 6d) Aberração cromática RGB (beta.23): R anda (+dx, +dy), B anda (−dx, −dy) e G fica — halo colorido nas bordas.
+        //     Deslocamento inteiro (sem reamostrar), como o deslocamento de canal do passo 5.
+        if params.aberrationDX != 0 || params.aberrationDY != 0 {
+            let base = out.clampedToExtent()
+            let dx = CGFloat(params.aberrationDX), dy = CGFloat(params.aberrationDY)
+            let r = only(base, red: 1, green: 0, blue: 0).transformed(by: CGAffineTransform(translationX: dx, y: dy))
+            let g = only(base, red: 0, green: 1, blue: 0)
+            let b = only(base, red: 0, green: 0, blue: 1).transformed(by: CGAffineTransform(translationX: -dx, y: -dy))
+            out = r.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: g])
+                .applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+                .cropped(to: frame)
+        }
+
+        // 6e) Ofuscação (beta.23): micro-desfoque direcional + bloom nas luzes, misturados com o original.
+        //     Nível baixo: letras só levemente estilizadas. Nível alto: perto do limite da leitura.
+        if params.bloomLevel > 0 {
+            let l = CGFloat(min(params.bloomLevel, 1))
+            let motion = CIFilter.motionBlur()
+            motion.inputImage = out.clampedToExtent()
+            motion.radius = Float(0.4 + 4.2 * l)
+            motion.angle = Float(params.blurAngle)
+            var soft = (motion.outputImage ?? out).cropped(to: frame)
+            let glow = CIFilter.bloom()
+            glow.inputImage = soft.clampedToExtent()
+            glow.radius = Float(3 + 12 * l)
+            glow.intensity = Float(0.15 + 0.65 * l)
+            soft = (glow.outputImage ?? soft).cropped(to: frame)
+            let mixer = CIFilter.dissolveTransition()
+            mixer.inputImage = out
+            mixer.targetImage = soft
+            mixer.time = Float(0.25 + 0.7 * l)
+            out = (mixer.outputImage ?? out).cropped(to: frame)
+        }
+
         // 7) Micro-ruído uniforme de ±N níveis por canal (quebra faixas de cor na compressão do Instagram)
         if params.noiseAmplitude > 0, let noise = CIFilter.randomGenerator().outputImage {
             // linear light: resultado = base + 2·camada − 1 → camada = 0,5 + (u − 0,5)·k dá base ± k
@@ -311,6 +349,34 @@ enum StoryOptimizer {
         return Raster(pixels: buf, pitch: pitch, image: made)
     }
 
+    /// Monta de novo o `Raster` a partir de pixels já alterados (usado depois do serrilhado e das linhas).
+    static func rebuild(_ pixels: [UInt8]) throws -> Raster {
+        var buf = pixels
+        let pitch = width * 4
+        guard buf.count >= pitch * height else { throw Failure.render }
+        let made: CGImage? = buf.withUnsafeMutableBytes { raw -> CGImage? in
+            guard let ctx = CGContext(data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: pitch,
+                                      space: srgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+            return ctx.makeImage()
+        }
+        guard let made else { throw Failure.render }
+        return Raster(pixels: buf, pitch: pitch, image: made)
+    }
+
+    /// Etapas de textura que rodam nos pixels (beta.23): serrilhado das bordas e, por último, as linhas diagonais.
+    /// Sem nenhuma das duas ligadas, devolve o mesmo `Raster` sem copiar nada.
+    static func applyTexture(_ raster: Raster, params: StoryParams) throws -> Raster {
+        guard params.needsRasterPass else { return raster }
+        var px = raster.pixels
+        if params.jitterLevel > 0 {
+            StoryTextureEffects.applyEdgeJitter(&px, width: width, height: height, level: params.jitterLevel, seed: params.jitterSeed)
+        }
+        if params.lineOpacity > 0 {
+            StoryTextureEffects.applyLines(&px, width: width, height: height, params: params)
+        }
+        return try rebuild(px)
+    }
+
     private static func tj<T: BinaryInteger>(_ v: T) -> Int32 { Int32(truncatingIfNeeded: v) }
 
     /// JPEG pela libjpeg-turbo: qualidade, baseline/progressivo e subamostragem 4:2:0/4:4:4 do sorteio,
@@ -380,7 +446,7 @@ enum StoryOptimizer {
         try autoreleasepool {
             guard let cg = loadSource(url) else { throw Failure.unreadable }
             let composed = compose(cg, options: options, params: params, background: backgroundColor(for: cg, options: options))
-            let raster = try rasterize(composed)
+            let raster = try applyTexture(rasterize(composed), params: params)
             let data = try (options.format == .jpg ? encodeJPEG(raster, params: params) : encodePNG(raster))
             try data.write(to: output, options: .atomic)
             return data.count
@@ -390,6 +456,10 @@ enum StoryOptimizer {
     /// Imagem do preview (mesma composição do arquivo final).
     static func preview(_ source: CGImage, options: StoryOptions, params: StoryParams) -> CGImage? {
         let composed = compose(source, options: options, params: params, background: backgroundColor(for: source, options: options))
+        // serrilhado e linhas rodam nos pixels: o preview passa pelo mesmo caminho do arquivo final
+        if params.needsRasterPass {
+            return (try? applyTexture(rasterize(composed), params: params))?.image
+        }
         return context.createCGImage(composed, from: canvas, format: .RGBA8, colorSpace: srgb)
     }
 

@@ -85,6 +85,21 @@ final class StoryBatch: ObservableObject {
     @Published private(set) var previewAfter: CGImage? = nil
     @Published private(set) var previewSummary = ""
     @Published private(set) var previewLoading = false
+    /// 1.0.0-beta.23: modal de inspeção Antes / Depois. Enquanto aberto, o preview também desenha duas imagens de referência
+    /// em 1080×1920 (as mesmas do arquivo final): o original só enquadrado e a versão com tudo menos as texturas.
+    @Published var inspecting = false {
+        didSet {
+            guard inspecting != oldValue else { return }
+            if inspecting {
+                refreshPreview()
+            } else {
+                inspectOriginal = nil
+                inspectPlain = nil
+            }
+        }
+    }
+    @Published private(set) var inspectOriginal: CGImage? = nil
+    @Published private(set) var inspectPlain: CGImage? = nil
     private var previewSource: (url: URL, image: CGImage)?
     private var previewTask: Task<Void, Never>?
 
@@ -231,7 +246,7 @@ final class StoryBatch: ObservableObject {
         let cap = Self.concurrency
         let started = Date()
         AppLog.info(.exportacao, "Otimizador em Lote: \(total) imagem(ns) × \(versions) versão(ões) → \(dest.lastPathComponent)",
-                    details: "Enquadramento: \(opts.fit.label) · Intensidade: \(opts.intensity.label) · Formato: \(opts.format.label)\(opts.mirror ? " · espelhado" : "")")
+                    details: "Enquadramento: \(opts.fit.label) · Intensidade: \(opts.intensity.label) · Texturas: \(opts.texturePreset.label) · Formato: \(opts.format.label)\(opts.mirror ? " · espelhado" : "")")
 
         runTask = Task { [weak self] in
             await BoundedParallel.run(jobs, limit: { cap }, work: { job -> Void? in
@@ -353,9 +368,12 @@ final class StoryBatch: ObservableObject {
             previewAfter = nil
             previewSummary = ""
             previewLoading = false
+            inspectOriginal = nil
+            inspectPlain = nil
             return
         }
         let opts = options
+        let inspect = inspecting
         let seed = StoryVersions.seed(item.seed, version: min(previewVersion, opts.versions))
         let url = item.url
         let cached = previewSource?.url == url ? previewSource?.image : nil
@@ -364,15 +382,26 @@ final class StoryBatch: ObservableObject {
             // espera um instante: arrastar um slider não redesenha a cada pixel
             try? await Task.sleep(nanoseconds: 120_000_000)
             guard !Task.isCancelled else { return }
-            let result: (source: CGImage?, after: CGImage?, summary: String) = await Task.detached(priority: .userInitiated) { () -> (CGImage?, CGImage?, String) in
-                let params = StoryParams.sample(opts, seed: seed)
-                guard let source = cached ?? StoryOptimizer.loadSource(url) else { return (nil, nil, params.summary) }
-                return (source, StoryOptimizer.preview(source, options: opts, params: params), params.summary)
-            }.value
+            let result: (source: CGImage?, after: CGImage?, original: CGImage?, plain: CGImage?, summary: String) =
+                await Task.detached(priority: .userInitiated) { () -> (CGImage?, CGImage?, CGImage?, CGImage?, String) in
+                    let params = StoryParams.sample(opts, seed: seed)
+                    guard let source = cached ?? StoryOptimizer.loadSource(url) else { return (nil, nil, nil, nil, params.summary) }
+                    let after = StoryOptimizer.preview(source, options: opts, params: params)
+                    var original: CGImage? = nil, plain: CGImage? = nil
+                    if inspect {
+                        // sem nenhuma variação (nem espelho): só o enquadramento 9:16 escolhido
+                        original = StoryOptimizer.preview(source, options: opts, params: StoryParams())
+                        // tudo igual ao arquivo final, menos as texturas — mesma geometria, dá para comparar pixel a pixel
+                        plain = params.hasTexture ? StoryOptimizer.preview(source, options: opts, params: params.withoutTexture) : after
+                    }
+                    return (source, after, original, plain, params.summary)
+                }.value
             guard !Task.isCancelled, let self else { return }
             if let source = result.source { self.previewSource = (url, source) }
             self.previewBefore = result.source
             self.previewAfter = result.after
+            self.inspectOriginal = inspect ? result.original : nil
+            self.inspectPlain = inspect ? result.plain : nil
             self.previewSummary = result.source == nil ? "Não consegui abrir esta imagem." : result.summary
             self.previewLoading = false
         }
