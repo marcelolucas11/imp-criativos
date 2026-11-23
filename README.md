@@ -54,7 +54,7 @@ Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O
   - deslocamento de 1px ou 2px no canal R ou B e granulação de filme;
   - vinheta e Unsharp Mask leve ou suavização;
   - espelhar (desligado de fábrica; só para imagens sem texto).
-- **Texturas, linhas e bordas** (opcional, desligado de fábrica; presets Sutil, Equilibrado, Intenso e Personalizado, cada efeito com slider de 0 a 100%): linhas diagonais bem marcadas (\\, /, X ou aleatória; espessura de 2 a 8px, espaçamento de 4 a 18px, faixa escura com realce claro, mistura hard-light/overlay e fase aleatória por imagem), serrilhado só nas bordas de alto contraste, aberração cromática RGB (1 a 6px) e ofuscação com bloom.
+- **Texturas, linhas e bordas** (opcional, desligado de fábrica; presets Sutil, Equilibrado, Intenso e Personalizado, cada efeito com slider de 0 a 100%): linhas diagonais em dois estilos: **Tom** (mantém a cor, só muda o brilho do pixel, borda suave, ângulo de 30° a 75° e riscos irregulares) ou **Gravura** (faixa escura com realce claro, pixel exato a 45°, hard-light/overlay); direção \\, /, X ou aleatória, fase e desenho sorteados por imagem, serrilhado só nas bordas de alto contraste, aberração cromática RGB (1 a 6px) e ofuscação com bloom.
 - **Versões por imagem (1 a 10):** cada versão sai com um sorteio diferente (`story_001_v2_a8f3k.jpg`).
 - **Gravação:** JPEG pela libjpeg-turbo com qualidade 88–93, baseline ou progressivo e subamostragem 4:2:0 ou 4:4:4 sorteados; ou PNG. Nomes `story_001_a8f3k.jpg` (ou só sequenciais).
 - **Antes / Depois** da imagem selecionada com as configurações atuais (é exatamente o arquivo que vai sair) e "Novo sorteio".
