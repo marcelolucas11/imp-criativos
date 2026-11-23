@@ -656,6 +656,8 @@ final class StoryTextureTests: XCTestCase {
         o.customTexture = .balanced
         var inkOnly = o
         inkOnly.lineStyle = .ink
+        // mesmo espaçamento nos dois estilos (a fase é sorteada dentro do espaçamento)
+        inkOnly.customInkLines.spacing = o.customToneLines.spacing
         o.lineStyle = .tone
         var angles = Set<Int>()
         for seed in 1...40 as ClosedRange<UInt64> {
