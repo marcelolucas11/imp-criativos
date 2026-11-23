@@ -14,6 +14,13 @@ struct HomeView: View {
                 HStack(alignment: .center) {
                     PageHeader(title: "Início", subtitle: "Limpe criativos e gere variações em lote.")
                     Button {
+                        model.selection = .storyOptimizer
+                    } label: {
+                        Label("Stories 9:16", systemImage: "rectangle.portrait.on.rectangle.portrait").padding(.horizontal, 6)
+                    }
+                    .controlSize(.large)
+                    .help("Otimizador em Lote: até 100 imagens em 1080×1920, sem IA")
+                    Button {
                         model.selection = .cleanOnly
                     } label: {
                         Label("Limpar logo", systemImage: "eraser").padding(.horizontal, 6)

@@ -30,6 +30,8 @@ struct IMPCriativosApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Limpar logo") { model.selection = .cleanOnly }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button("Otimizador em Lote (Stories 9:16)") { model.selection = .storyOptimizer }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
             }
             CommandGroup(after: .appInfo) {
                 Button("Buscar atualização…") {

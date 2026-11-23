@@ -37,6 +37,7 @@ struct MenuBarView: View {
             .keyboardShortcut("o")
         Button("Novo lote") { open(.newJob) }
         Button("Limpar logo") { open(.cleanOnly) }
+        Button("Otimizador em Lote (Stories 9:16)") { open(.storyOptimizer) }
         if !active.isEmpty {
             Button("Pausar todos os lotes") { runner.pauseAll() }
         }

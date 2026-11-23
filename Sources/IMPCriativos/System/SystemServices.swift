@@ -87,6 +87,19 @@ enum Pickers {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    /// 1.0.0-beta.21: várias imagens (ou pastas) de uma vez — Otimizador em Lote.
+    @MainActor
+    static func images(title: String) -> [URL] {
+        let panel = NSOpenPanel()
+        panel.title = title
+        panel.prompt = "Adicionar"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = ["jpg", "jpeg", "png", "webp", "heic", "heif"].compactMap { UTType(filenameExtension: $0) }
+        return panel.runModal() == .OK ? panel.urls : []
+    }
+
     @MainActor
     static func saveFile(title: String, name: String) -> URL? {
         let panel = NSSavePanel()

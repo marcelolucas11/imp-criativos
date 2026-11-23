@@ -12,6 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache da libjpeg-turbo
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/libjpeg-turbo
+            Vendor/CTurboJPEG/turbojpeg.h
+          key: libjpeg-turbo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_libjpeg_turbo.sh') }}
+
+      - name: Compilar libjpeg-turbo (Otimizador em Lote)
+        run: scripts/build_libjpeg_turbo.sh
+
       - name: Instalar XcodeGen
         run: brew install xcodegen
 

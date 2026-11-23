@@ -33,6 +33,9 @@ targets:
         DEVELOPMENT_TEAM: ""
         COMBINE_HIDPI_IMAGES: YES
         GENERATE_INFOPLIST_FILE: NO
+        # 1.0.0-beta.21: libjpeg-turbo (TurboJPEG) para o Otimizador em Lote — gerada por scripts/build_libjpeg_turbo.sh
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/CTurboJPEG
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor/libjpeg-turbo/lib
     scheme: {}
   # 1.0.0-beta.19: testes automáticos da lógica de velocidade e do paralelismo (sem abrir o app, sem chamar IA).
   # Compila só os arquivos puros (Foundation) junto com os testes.
@@ -43,6 +46,7 @@ targets:
       - path: Tests/IMPCriativosLogicTests
       - path: Sources/IMPCriativos/Pipeline/SpeedPolicy.swift
       - path: Sources/IMPCriativos/Pipeline/BoundedParallel.swift
+      - path: Sources/IMPCriativos/Pipeline/StoryOptimizerParams.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.imperaservices.impcriativos.logictests

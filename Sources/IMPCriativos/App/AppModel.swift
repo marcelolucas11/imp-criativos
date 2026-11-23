@@ -6,6 +6,8 @@ enum SidebarItem: Hashable {
     case newJob
     /// 1.0.0-beta.20: módulo "Limpar logo" (só limpeza, sem variações).
     case cleanOnly
+    /// 1.0.0-beta.21: Otimizador em Lote (Stories 9:16), 100% local, sem IA.
+    case storyOptimizer
     case job(UUID)
     case clients
     case logs

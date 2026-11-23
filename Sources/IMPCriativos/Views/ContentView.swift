@@ -13,6 +13,10 @@ struct ContentView: View {
                     NavigationLink(value: SidebarItem.home) { Label("Início", systemImage: "house") }
                     NavigationLink(value: SidebarItem.newJob) { Label("Novo lote", systemImage: "plus.square.on.square") }
                     NavigationLink(value: SidebarItem.cleanOnly) { Label("Limpar logo", systemImage: "eraser") }
+                    NavigationLink(value: SidebarItem.storyOptimizer) {
+                        Label("Otimizador em Lote (Stories 9:16)", systemImage: "rectangle.portrait.on.rectangle.portrait")
+                            .lineLimit(1)
+                    }
                     NavigationLink(value: SidebarItem.clients) { Label("Clientes", systemImage: "person.2") }
                     NavigationLink(value: SidebarItem.logs) {
                         Label("Histórico", systemImage: "list.bullet.rectangle")
@@ -43,6 +47,7 @@ struct ContentView: View {
                 case .home: HomeView()
                 case .newJob: NewJobView().id("novo-lote")
                 case .cleanOnly: NewJobView(cleanOnly: true).id("limpar-logo")
+                case .storyOptimizer: StoryOptimizerView()
                 case let .job(id): JobDetailView(jobID: id)
                 case .clients: ClientsView()
                 case .logs: LogsView()

@@ -1,0 +1,7 @@
+// 1.0.0-beta.21: ponte para a libjpeg-turbo (TurboJPEG) — `import CTurboJPEG` no Swift.
+// O cabeçalho e a biblioteca são gerados por scripts/build_libjpeg_turbo.sh.
+module CTurboJPEG [system] {
+    header "turbojpeg.h"
+    link "turbojpeg"
+    export *
+}

@@ -16,3 +16,7 @@ dmg/
 *.pem
 *.key
 .env
+
+# libjpeg-turbo compilada por scripts/build_libjpeg_turbo.sh (1.0.0-beta.21)
+Vendor/libjpeg-turbo/
+Vendor/CTurboJPEG/turbojpeg.h
