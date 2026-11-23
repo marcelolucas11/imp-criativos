@@ -700,9 +700,14 @@ final class StoryTextureTests: XCTestCase {
             try? FileManager.default.copyItem(at: url, to: Self.samples.appendingPathComponent("\(name).jpg"))
             try printBase64(name, url)
         }
-        let avg = timings.reduce(0, +) / Double(timings.count)
-        print("Otimizador: texturas \(String(format: "%.3f", avg)) s por imagem (1080×1920, \(timings.count) amostras)")
-        XCTAssertLessThan(avg, 8, "as texturas não podem deixar o lote lento")
+        // O tempo absoluto depende da máquina (o runner do CI tem GPU virtual e o Core Image é o que mais pesa), então o que
+        // vale é a comparação com a mesma imagem sem textura: as passadas de pixel (medidas em Release no CI) não podem dobrar o custo.
+        let off = try XCTUnwrap(timings.first)
+        let textured = Array(timings.dropFirst())
+        let avg = textured.reduce(0, +) / Double(textured.count)
+        print("Otimizador: sem textura \(String(format: "%.3f", off)) s · com textura \(String(format: "%.3f", avg)) s por imagem (1080×1920)")
+        print("Otimizador: tempos por preset \(timings.map { String(format: "%.2f", $0) })")
+        XCTAssertLessThan(avg, off * 2 + 3, "as texturas não podem deixar o lote lento")
     }
 
     /// Amostras só das linhas: 5 níveis do slider × 3 direções, em 1:1, e uma folha ampliada para conferir pixel a pixel.
@@ -711,7 +716,7 @@ final class StoryTextureTests: XCTestCase {
         let levels: [Double] = [0.10, 0.25, 0.50, 0.80, 1.0]
         let directions: [StoryLineDirection] = [.backslash, .slash, .cross]
         let tile = CGSize(width: 270, height: 165)
-        let crop = CGRect(x: 270, y: 800, width: tile.width, height: tile.height)
+        let crop = CGRect(x: 60, y: 620, width: tile.width, height: tile.height) // pega as barras de texto, o fundo escuro e o início do círculo
         func lined(_ direction: StoryLineDirection, _ level: Double) throws -> CGImage {
             var p = StoryParams()
             p.lineOpacity = StoryTexture.lineAlpha(level: level)
