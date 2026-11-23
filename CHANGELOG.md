@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## [1.0.0-beta.24] — 2026-11-23
+
+**Otimizador em Lote: linhas diagonais bem marcadas**
+
+Na beta.23 as linhas diagonais quase não apareciam em 1080×1920 (1px de espessura, mistura suave). Esta versão muda só o efeito de **Linhas Diagonais**. Serrilhado, aberração cromática, bloom e a janela "Inspecionar Antes / Depois" ficam como estavam.
+
+- **Geometria em pixels reais da saída 1080×1920:** espessura de **2 a 8px** (padrão 3px) e espaçamento de **4 a 18px** (padrão 8px). A espessura nunca passa de espaçamento − 2, então sempre sobra respiro entre as linhas. As bordas das faixas são firmes: o desenho é feito pixel a pixel, sem reamostragem nem suavização.
+- **Padrão de gravura em alto contraste:** cada linha vira uma **faixa escura** (preto) com uma **faixa fina de realce claro** (branco, com 60% da opacidade da escura) colada ao lado. Isso dá o efeito de relevo e faz a linha aparecer tanto em fundo claro quanto em fundo escuro.
+- **Mistura de alto impacto:** saem Multiply e Soft-light, que eram fracas. Ficam **Hard-light** (padrão) e **Overlay**. As configurações antigas com os modos removidos voltam sozinhas para Hard-light.
+- **Curva do slider "Intensidade":** 10% a 25% fica visível e discreto; 50% fica bem marcado sobre imagem e texto; 80% a 100% fica forte e dramático, com teto de 85% de opacidade para as letras continuarem legíveis.
+- **`\` e `/` com a mesma força:** uma é o espelho exato da outra. No **X**, as duas camadas entram em sequência com opacidade equilibrada (65% cada), sem estourar o brilho nem escurecer demais.
+- **Fase aleatória por imagem:** o ponto onde o padrão começa é sorteado para cada imagem (e, no X, para cada diagonal), então as linhas nunca caem nos mesmos pixels em duas imagens.
+- **Presets:** Sutil (20%, 12px/2px), Equilibrado (50%, 8px/3px) e Intenso (85%, X, 8px/4px).
+- Os sorteios novos ficam no fim da sequência, então o resto do sorteio de cada semente não muda.
+- **Testes novos:** geometria e estado de cada pixel (faixa escura, realce ou intacto) nas três direções; `\` e `/` com histograma idêntico; faixa legível em fundo escuro, médio e claro; X sem alterar o brilho médio além do limite; curva do slider; fase variando entre imagens; leitura de opções salvas com o modo antigo. O CI também gera uma folha de amostras com 5 níveis × 3 direções e uma folha ampliada.
+
 ## [1.0.0-beta.23] — 2026-11-23
 
 **Otimizador em Lote: texturas, linhas e bordas, e janela "Inspecionar Antes / Depois"**

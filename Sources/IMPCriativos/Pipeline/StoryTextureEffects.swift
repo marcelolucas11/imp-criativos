@@ -14,71 +14,96 @@ enum StoryTextureEffects {
 
     // MARK: - Linhas diagonais
 
-    /// Tabela de 256 entradas: o valor de um canal depois de uma linha escura passar por cima (modo de mistura + opacidade).
+    /// Estado de um pixel numa camada de linhas: fora das faixas, faixa escura ou faixa de realce claro.
+    static let bandNone = 0, bandDark = 1, bandLight = 2
+
+    /// Cada linha é um par de faixas coladas dentro do período `spacing`: `thickness` px escuros e, logo depois,
+    /// `highlight` px de realce claro (efeito de relevo / gravura); o resto do período fica intacto.
+    /// Tudo em pixels inteiros: nada de reamostragem nem suavização, então as bordas das faixas saem firmes.
+    static func band(k: Int, thickness: Int, highlight: Int) -> Int {
+        k < thickness ? bandDark : (k < thickness + highlight ? bandLight : bandNone)
+    }
+
+    /// Estado do pixel (x, y) — com y de cima para baixo — numa camada. `slash == false`: `\` (x − y constante, desce para a
+    /// direita); `slash == true`: `/` (x + y constante). Uma é o espelho exato da outra, com a mesma força.
+    static func bandState(x: Int, y: Int, spacing: Int, thickness: Int, highlight: Int, slash: Bool, phase: Int) -> Int {
+        let s = max(spacing, 2)
+        let k = (((slash ? x + y : x - y) + phase) % s + s) % s
+        return band(k: k, thickness: thickness, highlight: highlight)
+    }
+
+    /// Duas tabelas de 256 entradas: o valor de um canal depois de uma faixa escura e de uma faixa de realce passarem por cima.
     ///
-    /// A "tinta" da linha é preto (0). Resultado por modo, com b = valor do canal de 0 a 1:
-    /// - multiply: b × 0 = 0 (a linha escurece tudo na mesma proporção);
-    /// - overlay: 2·b·0 = 0 nas sombras e 2·b − 1 nas luzes (preserva melhor o contraste das luzes);
-    /// - soft-light: b² (escurece de leve, o mais discreto dos três).
-    /// A opacidade mistura o original com esse resultado.
-    static func lineLUT(blend: StoryLineBlend, opacity: Double) -> [UInt8] {
-        let op = min(max(opacity.isFinite ? opacity : 0, 0), 1)
-        var lut = [UInt8](repeating: 0, count: 256)
+    /// Tinta preta (faixa escura) e branca (realce); b = valor do canal de 0 a 1:
+    /// - hard-light: escura = b·0 = 0 · realce = screen com branco = 1 (os dois extremos, então aparece em qualquer cor);
+    /// - overlay: escura = 0 nas sombras e 2·b − 1 nas luzes · realce = 2·b nas sombras e 1 nas luzes.
+    /// A opacidade mistura o original com esse resultado; o realce usa `lineHighlightRatio` da opacidade da faixa escura.
+    /// No X, cada camada usa `lineCrossBalance` da opacidade.
+    static func lineLUTs(blend: StoryLineBlend, opacity: Double, cross: Bool = false) -> (dark: [UInt8], light: [UInt8]) {
+        let base = min(max(opacity.isFinite ? opacity : 0, 0), 1) * (cross ? StoryTexture.lineCrossBalance : 1)
+        let aDark = base, aLight = base * StoryTexture.lineHighlightRatio
+        var dark = [UInt8](repeating: 0, count: 256), light = [UInt8](repeating: 0, count: 256)
         for v in 0..<256 {
             let b = Double(v) / 255
-            let target: Double
+            let darkTarget: Double, lightTarget: Double
             switch blend {
-            case .multiply: target = 0
-            case .overlay: target = b < 0.5 ? 0 : 2 * b - 1
-            case .softLight: target = b * b
+            case .hardLight:
+                darkTarget = 0
+                lightTarget = 1
+            case .overlay:
+                darkTarget = b < 0.5 ? 0 : 2 * b - 1
+                lightTarget = b < 0.5 ? 2 * b : 1
             }
-            let out = (b + (target - b) * op) * 255
-            lut[v] = UInt8(min(max(out.rounded(), 0), 255))
+            func out(_ target: Double, _ a: Double) -> UInt8 { UInt8(min(max(((b + (target - b) * a) * 255).rounded(), 0), 255)) }
+            dark[v] = out(darkTarget, aDark)
+            light[v] = out(lightTarget, aLight)
         }
-        return lut
+        return (dark, light)
     }
 
-    /// O pixel (x, y) — com y de cima para baixo — fica sobre uma linha?
-    /// `\` : x − y constante (desce para a direita). `/` : x + y constante (sobe para a direita).
-    static func isLine(x: Int, y: Int, spacing: Int, thickness: Int, direction: StoryLineDirection, phase: Int) -> Bool {
-        let s = max(spacing, 2)
-        func mod(_ v: Int) -> Int { ((v % s) + s) % s }
-        let back = mod(x - y + phase) < thickness
-        let fwd = mod(x + y + phase) < thickness
-        switch direction {
-        case .backslash: return back
-        case .slash: return fwd
-        case .cross, .random: return back || fwd
-        }
-    }
-
-    /// Desenha as linhas diagonais. Só os pixels sobre as linhas mudam; o resto fica intacto.
+    /// Desenha as linhas diagonais. Só os pixels das faixas mudam; o resto fica intacto.
+    /// No X, as duas diagonais entram em sequência (cada uma com a própria fase e `lineCrossBalance` da opacidade).
     static func applyLines(_ px: inout [UInt8], width W: Int, height H: Int, params p: StoryParams) {
         guard p.lineOpacity > 0, W > 0, H > 0, px.count >= W * H * 4 else { return }
-        let s = min(max(p.lineSpacing, 2), 64)
-        let t = min(max(p.lineThickness, 1), s - 1)
-        let lut = lineLUT(blend: p.lineBlend, opacity: p.lineOpacity)
+        let s = min(max(p.lineSpacing, 4), 64)
+        let t = min(max(p.lineThickness, 1), s - 2)
+        let h = StoryTexture.lineHighlightWidth(spacing: s, thickness: t)
         let useBack = p.lineDirection != .slash
         let useFwd = p.lineDirection != .backslash
-        let phase = p.linePhase
+        let cross = useBack && useFwd
+        let luts = lineLUTs(blend: p.lineBlend, opacity: p.lineOpacity, cross: cross)
+        let phaseBack = p.linePhase
+        // no X a segunda diagonal tem fase própria; sozinha, a `/` usa a mesma fase da `\`
+        let phaseFwd = cross ? p.linePhase2 : p.linePhase
         px.withUnsafeMutableBufferPointer { buf in
-            lut.withUnsafeBufferPointer { l in
-                for y in 0..<H {
-                    // contadores que andam 1 por pixel (evita uma divisão por pixel)
-                    var kb = (((phase - y) % s) + s) % s
-                    var kf = (((phase + y) % s) + s) % s
-                    var o = y * W * 4
-                    for _ in 0..<W {
-                        if (useBack && kb < t) || (useFwd && kf < t) {
-                            buf[o] = l[Int(buf[o])]
-                            buf[o + 1] = l[Int(buf[o + 1])]
-                            buf[o + 2] = l[Int(buf[o + 2])]
+            luts.dark.withUnsafeBufferPointer { ld in
+                luts.light.withUnsafeBufferPointer { ll in
+                    for y in 0..<H {
+                        // contadores que andam 1 por pixel (evita uma divisão por pixel)
+                        var kb = (((phaseBack - y) % s) + s) % s
+                        var kf = (((phaseFwd + y) % s) + s) % s
+                        var o = y * W * 4
+                        for _ in 0..<W {
+                            if useBack {
+                                if kb < t {
+                                    buf[o] = ld[Int(buf[o])]; buf[o + 1] = ld[Int(buf[o + 1])]; buf[o + 2] = ld[Int(buf[o + 2])]
+                                } else if kb < t + h {
+                                    buf[o] = ll[Int(buf[o])]; buf[o + 1] = ll[Int(buf[o + 1])]; buf[o + 2] = ll[Int(buf[o + 2])]
+                                }
+                            }
+                            if useFwd {
+                                if kf < t {
+                                    buf[o] = ld[Int(buf[o])]; buf[o + 1] = ld[Int(buf[o + 1])]; buf[o + 2] = ld[Int(buf[o + 2])]
+                                } else if kf < t + h {
+                                    buf[o] = ll[Int(buf[o])]; buf[o + 1] = ll[Int(buf[o + 1])]; buf[o + 2] = ll[Int(buf[o + 2])]
+                                }
+                            }
+                            kb += 1
+                            if kb == s { kb = 0 }
+                            kf += 1
+                            if kf == s { kf = 0 }
+                            o += 4
                         }
-                        kb += 1
-                        if kb == s { kb = 0 }
-                        kf += 1
-                        if kf == s { kf = 0 }
-                        o += 4
                     }
                 }
             }

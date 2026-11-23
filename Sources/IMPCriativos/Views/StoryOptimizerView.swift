@@ -276,14 +276,14 @@ struct StoryOptimizerView: View {
             Picker("Direção", selection: $batch.options.customTexture.lineDirection) {
                 ForEach(StoryLineDirection.allCases) { Text($0.label).tag($0) }
             }
-            slider("Intensidade / opacidade", $batch.options.customTexture.lineOpacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            slider("Intensidade", $batch.options.customTexture.lineOpacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
             slider("Espaçamento", $batch.options.customTexture.lineSpacing, StoryTexture.spacingRange, step: 1, format: "%.0f px")
             slider("Espessura", $batch.options.customTexture.lineThickness, StoryTexture.thicknessRange, step: 1, format: "%.0f px")
             Picker("Mistura", selection: $batch.options.customTexture.lineBlend) {
                 ForEach(StoryLineBlend.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            Text("A espessura nunca passa do espaçamento menos 1 px. As linhas são sempre escuras; em imagens muito escuras prefira Overlay.")
+            Text("Medidas em pixels da saída 1080×1920, na horizontal. Cada linha é uma faixa escura com um realce claro colado nela, então aparece sobre fundos escuros, áreas claras e letras. A espessura nunca passa do espaçamento menos 2 px. Intensidade: 10–25% sutil, 50% bem marcado, 80–100% forte.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         Toggle("Serrilhado das bordas (quebra o anti-aliasing)", isOn: $batch.options.customTexture.jitter)
