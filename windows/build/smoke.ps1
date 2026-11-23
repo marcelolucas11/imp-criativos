@@ -14,6 +14,11 @@ if (-not $p.WaitForExit(300000)) { $p.Kill(); throw 'Teste de fumaça passou de 
 $result = Join-Path $out 'resultado.txt'
 if (Test-Path $result) { Get-Content $result } else { Write-Host 'resultado.txt não foi gerado' }
 Get-ChildItem (Join-Path $out 'capturas') -ErrorAction SilentlyContinue | Format-Table Name, Length
+# prévias em base64 no log (para conferir as telas sem baixar o artefato)
+Get-ChildItem (Join-Path $out 'previas') -Filter *.jpg -ErrorAction SilentlyContinue | ForEach-Object {
+  $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName))
+  for ($i = 0; $i -lt $b64.Length; $i += 4000) { Write-Host "CAPTURA-B64 $($_.BaseName) $($b64.Substring($i, [Math]::Min(4000, $b64.Length - $i)))" }
+}
 # não sobe os dados de exemplo nem as entradas, só capturas, saídas do Otimizador e o resultado
 Remove-Item -Recurse -Force (Join-Path $out 'dados') -ErrorAction SilentlyContinue
 if ($p.ExitCode -ne 0) { throw "Teste de fumaça falhou (código $($p.ExitCode))" }

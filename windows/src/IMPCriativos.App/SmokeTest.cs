@@ -101,8 +101,16 @@ public static class SmokeTest
         rtb.Render(visual);
         var enc = new PngBitmapEncoder();
         enc.Frames.Add(BitmapFrame.Create(rtb));
-        using var fs = File.Create(path);
-        enc.Save(fs);
+        using (var fs = File.Create(path)) enc.Save(fs);
+
+        // prévia pequena em JPEG (o smoke.ps1 imprime no log, para conferir sem baixar o artefato)
+        var previews = Path.Combine(Path.GetDirectoryName(path)!, "..", "previas");
+        Directory.CreateDirectory(previews);
+        var small = new TransformedBitmap(rtb, new ScaleTransform(0.6 / dpi.DpiScaleX, 0.6 / dpi.DpiScaleY));
+        var jpg = new JpegBitmapEncoder { QualityLevel = 72 };
+        jpg.Frames.Add(BitmapFrame.Create(small));
+        using var js = File.Create(Path.Combine(previews, Path.GetFileNameWithoutExtension(path) + ".jpg"));
+        jpg.Save(js);
     }
 
     /// <summary>Imagem de teste: degradê, faixas e blocos de "texto" de alto contraste.</summary>
@@ -264,8 +272,9 @@ public static class SmokeTest
         // .zip do lote
         if (batch.LastRunFolder != null)
         {
-            var zip = await batch.MakeZip(Path.Combine(folder, "stories.zip"));
-            Check(zip != null && File.Exists(zip), "Baixar Tudo (.ZIP) gerou o arquivo");
+            var zipPath = Path.Combine(folder, "stories.zip");
+            var error = await batch.MakeZip(zipPath);
+            Check(error == null && File.Exists(zipPath) && new FileInfo(zipPath).Length > 1000, "Baixar Tudo (.ZIP) gerou o arquivo" + (error != null ? $": {error}" : ""));
         }
 
         window.Hide();

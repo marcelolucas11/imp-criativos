@@ -587,8 +587,9 @@ public sealed class StoryOptimizerView : Page
                     var name = System.IO.Path.GetFileName(folder.TrimEnd('\\', '/')) + ".zip";
                     if (Pickers.SaveFile("Salvar o .zip", name, "Arquivo ZIP (*.zip)|*.zip") is string target)
                     {
-                        var made = await B.MakeZip(target);
-                        if (made != null) Shell.Reveal(made);
+                        var error = await B.MakeZip(target);
+                        if (error == null) Shell.Reveal(target);
+                        else Alert("Baixar Tudo (.ZIP)", $"Não consegui criar o ZIP: {error}");
                     }
                 }, enabled: !B.Zipping));
             }
