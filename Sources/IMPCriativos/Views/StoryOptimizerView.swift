@@ -6,6 +6,8 @@ import AppKit
 struct StoryOptimizerView: View {
     @ObservedObject private var batch = StoryBatch.shared
     @State private var dropTargeted = false
+    /// 1.0.0-beta.23: modal "Inspecionar Antes / Depois".
+    @State private var showInspector = false
 
     private var adjustments: StoryAdjustments { batch.options.adjustments }
 
@@ -33,6 +35,7 @@ struct StoryOptimizerView: View {
             .padding(28)
             .frame(maxWidth: 1120, alignment: .leading)
         }
+        .sheet(isPresented: $showInspector) { StoryInspectorView() }
     }
 
     // MARK: - Imagens
@@ -140,6 +143,26 @@ struct StoryOptimizerView: View {
                 }
             }
 
+            Section("Texturas, linhas e bordas") {
+                Picker("Preset", selection: texturePresetBinding) {
+                    ForEach(StoryTexturePreset.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Text(batch.options.texturePreset.hint)
+                    .font(.caption)
+                    .foregroundStyle(batch.options.texturePreset == .intense ? Brand.warning : .secondary)
+                if batch.options.texturePreset == .custom {
+                    textureControls
+                } else if batch.options.texturePreset != .off {
+                    Text(Self.describe(batch.options.texture))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if batch.options.texturePreset != .off {
+                    Text("Vale junto com a Intensidade acima. Use \"Inspecionar Antes / Depois\" para dar zoom nas letras antes de processar o lote.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section("Saída") {
                 Picker("Formato", selection: $batch.options.format) {
                     ForEach(StoryOutputFormat.allCases) { Text($0.label).tag($0) }
@@ -239,6 +262,63 @@ struct StoryOptimizerView: View {
             .disabled(batch.options.format != .jpg)
     }
 
+    private var texturePresetBinding: Binding<StoryTexturePreset> {
+        Binding(
+            get: { batch.options.texturePreset },
+            set: { batch.options.selectTexturePreset($0) }
+        )
+    }
+
+    @ViewBuilder
+    private var textureControls: some View {
+        Toggle("Linhas diagonais", isOn: $batch.options.customTexture.lines)
+        if batch.options.customTexture.lines {
+            Picker("Direção", selection: $batch.options.customTexture.lineDirection) {
+                ForEach(StoryLineDirection.allCases) { Text($0.label).tag($0) }
+            }
+            slider("Intensidade / opacidade", $batch.options.customTexture.lineOpacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            slider("Espaçamento", $batch.options.customTexture.lineSpacing, StoryTexture.spacingRange, step: 1, format: "%.0f px")
+            slider("Espessura", $batch.options.customTexture.lineThickness, StoryTexture.thicknessRange, step: 1, format: "%.0f px")
+            Picker("Mistura", selection: $batch.options.customTexture.lineBlend) {
+                ForEach(StoryLineBlend.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text("A espessura nunca passa do espaçamento menos 1 px. As linhas são sempre escuras; em imagens muito escuras prefira Overlay.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Toggle("Serrilhado das bordas (quebra o anti-aliasing)", isOn: $batch.options.customTexture.jitter)
+        if batch.options.customTexture.jitter {
+            slider("Nível de serrilhado", $batch.options.customTexture.jitterPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            Text("Só nas bordas de alto contraste (texto, botões e contornos). O resto da foto não muda.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Toggle("Aberração cromática RGB (R e B em sentidos opostos)", isOn: $batch.options.customTexture.aberration)
+        if batch.options.customTexture.aberration {
+            slider("Deslocamento RGB", $batch.options.customTexture.aberrationPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            let px = 1 + Int((Double(StoryTexture.aberrationMaxPixels - 1) * batch.options.customTexture.aberrationPercent / 100).rounded())
+            Text("Cerca de \(px) px no nível escolhido (1 a \(StoryTexture.aberrationMaxPixels) px).")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Toggle("Ofuscação do contraste (bloom + micro-desfoque)", isOn: $batch.options.customTexture.bloom)
+        if batch.options.customTexture.bloom {
+            slider("Nível de ofuscação", $batch.options.customTexture.bloomPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            Text("Baixo: letras só levemente estilizadas. Alto: perto do limite da leitura.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Resumo das texturas do preset em uma linha.
+    static func describe(_ t: StoryTexture) -> String {
+        var parts: [String] = []
+        if t.lines {
+            parts.append("linhas \(t.lineDirection.label.lowercased()), \(Int(t.lineOpacityPercent))%, espaçamento \(Int(t.lineSpacing)) px, espessura \(Int(t.lineThickness)) px, \(t.lineBlend.label)")
+        }
+        if t.jitter { parts.append("serrilhado \(Int(t.jitterPercent))%") }
+        if t.aberration { parts.append("aberração RGB \(Int(t.aberrationPercent))%") }
+        if t.bloom { parts.append("ofuscação \(Int(t.bloomPercent))%") }
+        return "Sorteado por imagem (70% a 100% do nível): " + (parts.isEmpty ? "nenhum efeito" : parts.joined(separator: " · ")) + "."
+    }
+
     private func slider(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double, format: String) -> some View {
         LabeledContent(title) {
             HStack(spacing: 8) {
@@ -302,6 +382,16 @@ struct StoryOptimizerView: View {
                     .disabled(batch.selected == nil || batch.running)
                     .help("Sorteia outros valores para esta imagem, dentro dos mesmos limites")
                 }
+                Button {
+                    showInspector = true
+                } label: {
+                    Label("Inspecionar Antes / Depois", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(batch.selected == nil)
+                .help("Abre o antes e depois em tela grande, com cortina, zoom e arrastar")
                 if let item = batch.selected {
                     HStack(spacing: 10) {
                         previewPane("Antes", batch.previewBefore)

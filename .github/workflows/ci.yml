@@ -42,6 +42,32 @@ jobs:
             -derivedDataPath build-tests ARCHS=arm64 CODE_SIGN_IDENTITY="-" test 2>&1 | tee test.log | grep -E "Test Case|Executed|error:|failed|ruído|granulação|riscos|temperatura|zoom agressivo|Otimizador:|SAMPLEB64" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" test.log
 
+      - name: Velocidade das texturas (Release, swiftc -O)
+        run: |
+          mkdir -p /tmp/bench
+          cat > /tmp/bench/main.swift <<'EOF'
+          import Foundation
+          let W = 1080, H = 1920
+          var px = [UInt8](repeating: 0, count: W * H * 4)
+          for y in 0..<H { for x in 0..<W { let v = UInt8(30 + x * 40 / W + y * 20 / H); let o = (y * W + x) * 4; px[o] = v; px[o + 1] = v / 2; px[o + 2] = v } }
+          for b in 0..<12 { for y in (200 + b * 120)..<(240 + b * 120) { for x in 100..<(1000 - b * 30) { let o = (y * W + x) * 4; px[o] = 255; px[o + 1] = 255; px[o + 2] = 255 } } }
+          var p = StoryParams()
+          p.lineOpacity = 0.5; p.lineSpacing = 4; p.lineThickness = 2; p.lineDirection = .cross; p.lineBlend = .overlay; p.linePhase = 1
+          var jitter = [Double](), lines = [Double]()
+          for i in 0..<6 {
+              var t = px
+              let t0 = Date()
+              StoryTextureEffects.applyEdgeJitter(&t, width: W, height: H, level: 1, seed: 7)
+              let t1 = Date()
+              StoryTextureEffects.applyLines(&t, width: W, height: H, params: p)
+              let t2 = Date()
+              if i > 0 { jitter.append(t1.timeIntervalSince(t0) * 1000); lines.append(t2.timeIntervalSince(t1) * 1000) }
+          }
+          print("Texturas em Release 1080x1920: serrilhado \(String(format: "%.0f", jitter.min()!)) ms, linhas \(String(format: "%.0f", lines.min()!)) ms")
+          EOF
+          swiftc -O Sources/IMPCriativos/Pipeline/StoryOptimizerParams.swift Sources/IMPCriativos/Pipeline/StoryTextureEffects.swift /tmp/bench/main.swift -o /tmp/bench/bench
+          /tmp/bench/bench
+
       - name: Amostras do Otimizador em Lote
         if: always()
         uses: actions/upload-artifact@v4

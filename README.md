@@ -54,9 +54,11 @@ Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O
   - deslocamento de 1px ou 2px no canal R ou B e granulação de filme;
   - vinheta e Unsharp Mask leve ou suavização;
   - espelhar (desligado de fábrica; só para imagens sem texto).
+- **Texturas, linhas e bordas** (opcional, desligado de fábrica; presets Sutil, Equilibrado, Intenso e Personalizado, cada efeito com slider de 0 a 100%): linhas diagonais (\\, /, X ou aleatória; espaçamento, espessura e mistura overlay/multiply/soft-light), serrilhado só nas bordas de alto contraste, aberração cromática RGB (1 a 6px) e ofuscação com bloom.
 - **Versões por imagem (1 a 10):** cada versão sai com um sorteio diferente (`story_001_v2_a8f3k.jpg`).
 - **Gravação:** JPEG pela libjpeg-turbo com qualidade 88–93, baseline ou progressivo e subamostragem 4:2:0 ou 4:4:4 sorteados; ou PNG. Nomes `story_001_a8f3k.jpg` (ou só sequenciais).
 - **Antes / Depois** da imagem selecionada com as configurações atuais (é exatamente o arquivo que vai sair) e "Novo sorteio".
+- **Inspecionar Antes / Depois:** janela grande com cortina arrastável ou lado a lado, zoom 100% / 200% / 400% com arrastar e "Re-randomizar Preview", para conferir o serrilhado, as linhas e o deslocamento RGB direto nas letras antes de processar o lote.
 - **Fila** com 4 imagens por vez, barra "X de Y", status por arquivo e Cancelar. Salva numa pasta `stories_data_hora` dentro da pasta escolhida e oferece **Baixar Tudo (.ZIP)**.
 
 ## Instalar

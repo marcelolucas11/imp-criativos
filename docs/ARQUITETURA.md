@@ -63,6 +63,18 @@ overlay/soft-light, `CIDissolveTransition` na opacidade) → ruído (`CILinearLi
 
 Também entrou `StoryOptions.versionsPerImage` (1–10). `StoryVersions.seed(seed, version:)` usa a versão 1 = semente da imagem, que é a do preview. Os sorteios novos ficam no fim da sequência, então Leve e Moderado dão o mesmo resultado da beta.21. `StoryAdjustments` tem leitura tolerante, para que os ajustes salvos antes continuem valendo.
 
+**beta.23 — texturas, linhas e bordas e inspeção:**
+
+| Arquivo | Papel |
+|---|---|
+| `Pipeline/StoryTextureEffects.swift` | Só Foundation (entra nos testes). Passadas sobre o buffer RGBX 1080×1920 já desenhado: `applyEdgeJitter` (Sobel na luminância + dilatação de 2px → máscara; reamostragem nearest por degraus e jitter por linha/coluna só na máscara) e `applyLines` (LUT por modo de mistura, contadores módulo espaçamento, pixel exato) |
+| `Pipeline/StoryOptimizerParams.swift` | `StoryTexture` (chaves e níveis 0–100%), `StoryTexturePreset` (Desligado/Sutil/Equilibrado/Intenso/Personalizado), `StoryOptions.texturePreset` e `customTexture` (leitura tolerante), campos novos em `StoryParams` e sorteios no fim de `sample` |
+| `Pipeline/StoryOptimizer.swift` | `compose`: aberração RGB (`CIMaximumCompositing` com R em +d e B em −d) e ofuscação (`CIMotionBlur` + `CIBloom` + `CIDissolveTransition`) antes do micro-ruído; `applyTexture` roda depois do `rasterize` (serrilhado e, por último, linhas), no arquivo final e no preview |
+| `Pipeline/StoryBatch.swift` | `inspecting`, `inspectOriginal` (só enquadrado) e `inspectPlain` (tudo menos texturas): só são desenhados enquanto a janela está aberta |
+| `Views/StoryInspectorView.swift` | Janela de inspeção: `NSView` própria (cortina, lado a lado, zoom 100/200/400% sem suavização, pan por arrastar e rolar) dentro de `NSViewRepresentable` |
+
+O serrilhado roda antes das linhas de propósito: as linhas, sendo de alto contraste, seriam tratadas como borda. Os efeitos de pixel ficam na CPU porque precisam de *nearest* exato e de deslocamento por linha/coluna, que o Core Image não faz sem um kernel próprio.
+
 Cada imagem recebe a semente ao entrar na lista: o preview e o arquivo final saem da mesma semente; "Novo sorteio" troca a semente.
 Os sorteios são feitos sempre na mesma ordem e só depois zerados pelas etapas desligadas, então desligar uma etapa não muda as outras.
 

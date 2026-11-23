@@ -1,5 +1,35 @@
 # Histórico de versões
 
+## [1.0.0-beta.23] — 2026-11-23
+
+**Otimizador em Lote: texturas, linhas e bordas, e janela "Inspecionar Antes / Depois"**
+
+- **Nova seção "Texturas, linhas e bordas"** com os presets **Desligado**, **Sutil**, **Equilibrado**, **Intenso** e **Personalizado**. Ela vale junto com a Intensidade (por exemplo, nível Normal + textura Equilibrada). Vem **desligada de fábrica**, então nada muda para quem já usa o app: a mesma imagem com a mesma semente sai igual à da beta.22.
+  - **Sutil:** linhas leves, micro-aberração (1 a 2px) e serrilhado mínimo.
+  - **Equilibrado:** linhas diagonais visíveis, serrilhado moderado e deslocamento RGB médio.
+  - **Intenso:** linhas marcadas (cruzadas), serrilhado alto, aberração cromática e bloom fortes.
+  - No **Personalizado**, cada efeito tem a própria chave e um slider de 0 a 100%. Ao escolher Personalizado, os sliders partem do preset que estava em uso.
+- **Linhas diagonais:** direção `\`, `/`, X (cruzada) ou **aleatória por imagem**; opacidade de 0 a 100%; espaçamento de 2 a 12px; espessura de 1 a 3px (sempre menor que o espaçamento); mistura **Overlay**, **Multiply** ou **Soft-light**. São linhas escuras desenhadas pixel a pixel, sem reamostrar. A opacidade tem teto de 85%, para o texto continuar legível mesmo com o slider no máximo. São diferentes dos "riscos diagonais" das intensidades Normal e Agressivo (±2 a ±10 níveis, média zero), que continuam como estavam.
+- **Serrilhado de bordas:** só nas bordas de alto contraste (texto, botões, contornos). O app acha as bordas com Sobel na luminância, alarga a máscara em 2px e, só ali, quebra o anti-aliasing com reamostragem *nearest* por degraus (a grade vai a 100%–50%) e jitter por linha e por coluna (de ±0 a ±3px). Ruído, granulação e degradês suaves não entram na máscara, então o resto da foto não muda.
+- **Aberração cromática RGB:** o canal vermelho anda para um lado e o azul para o oposto, de 1px a 6px conforme o nível, com o verde parado (halo colorido em volta de letras e objetos). A direção é sorteada por imagem.
+- **Ofuscação (bloom + micro-desfoque):** micro-desfoque direcional curto com bloom nas luzes. No nível baixo as letras só ficam levemente estilizadas; no alto ficam perto do limite da leitura.
+- Cada imagem sorteia entre **70% e 100%** do nível escolhido, para as versões não saírem idênticas. Os sorteios novos ficam no fim da sequência.
+- **Botão "Inspecionar Antes / Depois"** (lupa), logo acima do preview. Abre uma janela grande com a imagem em 1080×1920, os mesmos pixels do arquivo final:
+  - **Cortina:** barra vertical arrastável, com o Antes à esquerda e o Depois à direita.
+  - **Lado a lado:** duas colunas que se movem juntas.
+  - **Zoom** Ajustar, 100%, 200% e 400% com arrastar e rolar para mover. 100% é um pixel da imagem para cada pixel real da tela e, com zoom, sem suavização, para ver o serrilhado de verdade.
+  - **Re-randomizar Preview:** sorteia outros valores para a imagem (a nova semente também vale no lote).
+  - O **Antes** pode ser o **original enquadrado** (sem nenhuma variação) ou **sem as texturas** (tudo igual ao arquivo final, menos as texturas), com a mesma geometria para comparar pixel a pixel.
+- O resumo do Histórico e o do preview passam a listar as texturas usadas.
+- **Desempenho:** linhas e serrilhado são passadas inteiras sobre o buffer de 1080×1920 (medido em Release: cerca de 30 ms o serrilhado e 4 ms as linhas, por imagem); aberração e bloom rodam no Core Image, na placa de vídeo. Tudo continua 100% no Mac, sem rede e sem IA.
+- **Testes automáticos novos:**
+  - texturas desligadas não mudam o sorteio das outras etapas, e as opções salvas antes continuam lendo;
+  - cada preset liga o que promete; a direção aleatória sorteia as três; a aberração fica entre 1 e 6px;
+  - as linhas batem com a geometria de cada direção, em todos os pixels; \ e / correm cada uma para o seu lado;
+  - o serrilhado deixa quieta a área lisa, a granulação e o degradê, rasga só a vizinhança de bordas fortes (verticais e horizontais) e é reproduzível;
+  - vermelho e azul andam em sentidos opostos pelo número certo de pixels; o bloom vaza só perto de áreas claras;
+  - arquivos finais de cada preset saem válidos em 1080×1920.
+
 ## [1.0.0-beta.22] — 2026-11-23
 
 **Otimizador em Lote: níveis Normal e Agressivo, riscos diagonais e versões por imagem**
