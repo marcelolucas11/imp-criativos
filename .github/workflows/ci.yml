@@ -52,7 +52,7 @@ jobs:
           for y in 0..<H { for x in 0..<W { let v = UInt8(30 + x * 40 / W + y * 20 / H); let o = (y * W + x) * 4; px[o] = v; px[o + 1] = v / 2; px[o + 2] = v } }
           for b in 0..<12 { for y in (200 + b * 120)..<(240 + b * 120) { for x in 100..<(1000 - b * 30) { let o = (y * W + x) * 4; px[o] = 255; px[o + 1] = 255; px[o + 2] = 255 } } }
           var p = StoryParams()
-          p.lineOpacity = 0.5; p.lineSpacing = 4; p.lineThickness = 2; p.lineDirection = .cross; p.lineBlend = .overlay; p.linePhase = 1
+          p.lineOpacity = 0.6; p.lineSpacing = 8; p.lineThickness = 3; p.lineDirection = .cross; p.lineBlend = .hardLight; p.linePhase = 1; p.linePhase2 = 4
           var jitter = [Double](), lines = [Double]()
           for i in 0..<6 {
               var t = px

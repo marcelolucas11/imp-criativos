@@ -39,14 +39,15 @@ final class StoryTextureTests: XCTestCase {
         return o
     }
 
-    private func linesParams(_ direction: StoryLineDirection, blend: StoryLineBlend = .multiply) -> StoryParams {
+    private func linesParams(_ direction: StoryLineDirection, blend: StoryLineBlend = .hardLight) -> StoryParams {
         var p = StoryParams()
         p.lineOpacity = 0.85
-        p.lineSpacing = 6
-        p.lineThickness = 2
+        p.lineSpacing = 8
+        p.lineThickness = 4
         p.lineDirection = direction
         p.lineBlend = blend
         p.linePhase = 3
+        p.linePhase2 = 5
         return p
     }
 
@@ -80,7 +81,9 @@ final class StoryTextureTests: XCTestCase {
             o.texturePreset = .subtle
             let s = StoryParams.sample(o, seed: UInt64(seed))
             XCTAssertGreaterThan(s.lineOpacity, 0)
-            XCTAssertLessThanOrEqual(s.lineOpacity, 0.15 * StoryTexture.lineOpacityCap + 1e-9, "linhas leves")
+            XCTAssertLessThanOrEqual(s.lineOpacity, StoryTexture.lineAlpha(level: 0.2) + 1e-9, "linhas leves")
+            XCTAssertEqual(s.lineSpacing, 12)
+            XCTAssertEqual(s.lineThickness, 2)
             XCTAssertGreaterThan(s.jitterLevel, 0)
             XCTAssertLessThanOrEqual(s.jitterLevel, 0.15 + 1e-9, "serrilhado mínimo")
             XCTAssertTrue(s.aberrationDX != 0 || s.aberrationDY != 0)
@@ -89,7 +92,10 @@ final class StoryTextureTests: XCTestCase {
 
             o.texturePreset = .balanced
             let b = StoryParams.sample(o, seed: UInt64(seed))
-            XCTAssertGreaterThan(b.lineOpacity, 0.1)
+            XCTAssertGreaterThanOrEqual(b.lineOpacity, StoryTexture.lineAlpha(level: 0.45) - 1e-9, "50%: bem marcado")
+            XCTAssertLessThanOrEqual(b.lineOpacity, StoryTexture.lineAlpha(level: 0.5) + 1e-9)
+            XCTAssertEqual(b.lineSpacing, 8)
+            XCTAssertEqual(b.lineThickness, 3)
             XCTAssertGreaterThanOrEqual(b.jitterLevel, 0.45 * 0.7 - 1e-9)
             XCTAssertLessThanOrEqual(b.jitterLevel, 0.45 + 1e-9)
             XCTAssertEqual(b.bloomLevel, 0)
@@ -98,12 +104,13 @@ final class StoryTextureTests: XCTestCase {
             o.texturePreset = .intense
             let i = StoryParams.sample(o, seed: UInt64(seed))
             XCTAssertEqual(i.lineDirection, .cross)
-            XCTAssertEqual(i.lineThickness, 2)
-            XCTAssertEqual(i.lineSpacing, 4)
+            XCTAssertEqual(i.lineThickness, 4)
+            XCTAssertEqual(i.lineSpacing, 8)
             XCTAssertGreaterThanOrEqual(i.bloomLevel, 0.7 * 0.7 - 1e-9)
             XCTAssertLessThanOrEqual(i.bloomLevel, 0.7 + 1e-9)
             XCTAssertGreaterThanOrEqual(i.jitterLevel, 0.8 * 0.7 - 1e-9)
-            XCTAssertLessThanOrEqual(i.lineOpacity, 0.7 * StoryTexture.lineOpacityCap + 1e-9)
+            XCTAssertLessThanOrEqual(i.lineOpacity, StoryTexture.lineAlpha(level: 0.85) + 1e-9)
+            XCTAssertGreaterThan(i.lineOpacity, b.lineOpacity, "Intenso marca mais que Equilibrado")
             XCTAssertLessThan(StoryTexture.lineOpacityCap, 1, "a leitura do texto não some, mesmo com o slider em 100%")
         }
     }
@@ -171,24 +178,32 @@ final class StoryTextureTests: XCTestCase {
     func testCustomTextureIsClampedAndThicknessStaysBelowSpacing() {
         var t = StoryTexture()
         t.lineSpacing = 2
-        t.lineThickness = 3
+        t.lineThickness = 1
         t.lineOpacityPercent = 250
         t.jitterPercent = -10
         t.aberrationPercent = .nan
         let c = t.clamped()
-        XCTAssertEqual(c.lineThickness, 1, "com espaçamento 2px, a espessura máxima é 1px")
+        XCTAssertEqual(c.lineSpacing, 4, "espaçamento mínimo de 4px na saída 1080×1920")
+        XCTAssertEqual(c.lineThickness, 2, "espessura mínima de 2px")
         XCTAssertEqual(c.lineOpacityPercent, 100)
         XCTAssertEqual(c.jitterPercent, 0)
         XCTAssertEqual(c.aberrationPercent, 0)
-        t.lineSpacing = 12
-        t.lineThickness = 3
-        XCTAssertEqual(t.clamped().lineThickness, 3)
+        t.lineSpacing = 18
+        t.lineThickness = 8
+        XCTAssertEqual(t.clamped().lineThickness, 8, "espessura máxima de 8px")
+        t.lineSpacing = 99
+        XCTAssertEqual(t.clamped().lineSpacing, 18, "espaçamento máximo de 18px")
+        t.lineSpacing = 8
+        XCTAssertEqual(t.clamped().lineThickness, 6, "sempre sobram 2px: espessura ≤ espaçamento − 2")
+        XCTAssertEqual(StoryTexture().lineSpacing, 8)
+        XCTAssertEqual(StoryTexture().lineThickness, 3)
         var o = textureOptions
         o.texturePreset = .custom
         o.customTexture = t
         o.customTexture.lines = true
         let p = StoryParams.sample(o, seed: 3)
-        XCTAssertLessThan(p.lineThickness, p.lineSpacing)
+        XCTAssertLessThanOrEqual(p.lineThickness, p.lineSpacing - 2)
+        XCTAssertGreaterThanOrEqual(p.lineThickness, 2)
     }
 
     func testChoosingCustomStartsFromThePresetInUse() {
@@ -222,7 +237,7 @@ final class StoryTextureTests: XCTestCase {
         n.texturePreset = .custom
         n.customTexture = .intense
         n.customTexture.lineDirection = .slash
-        n.customTexture.lineBlend = .softLight
+        n.customTexture.lineBlend = .overlay
         let back = try JSONDecoder().decode(StoryOptions.self, from: JSONEncoder().encode(n))
         XCTAssertEqual(back, n)
 
@@ -230,6 +245,10 @@ final class StoryTextureTests: XCTestCase {
         let p = try JSONDecoder().decode(StoryOptions.self, from: partial)
         XCTAssertEqual(p.texturePreset, .balanced)
         XCTAssertEqual(p.customTexture.lineSpacing, 9)
+        let oldBlend = #"{"customTexture":{"lines":true,"lineBlend":"softLight"}}"#.data(using: .utf8)!
+        let q = try JSONDecoder().decode(StoryOptions.self, from: oldBlend)
+        XCTAssertEqual(q.customTexture.lineBlend, .hardLight, "modo removido (Soft-light) volta para Hard-light")
+        XCTAssertTrue(q.customTexture.lines)
         XCTAssertEqual(p.customTexture.jitterPercent, StoryTexture().jitterPercent, "campo ausente fica no padrão")
     }
 
@@ -252,19 +271,128 @@ final class StoryTextureTests: XCTestCase {
             var px = buffer(W, H, 200)
             let p = linesParams(direction)
             StoryTextureEffects.applyLines(&px, width: W, height: H, params: p)
-            var covered = 0
+            let cross = direction == .cross
+            let luts = StoryTextureEffects.lineLUTs(blend: p.lineBlend, opacity: p.lineOpacity, cross: cross)
+            let h = StoryTexture.lineHighlightWidth(spacing: 8, thickness: 4)
+            XCTAssertEqual(h, 1, "realce fino: um terço da faixa escura")
+            var dark = 0, light = 0
             for y in 0..<H {
                 for x in 0..<W {
-                    let on = StoryTextureEffects.isLine(x: x, y: y, spacing: 6, thickness: 2, direction: direction, phase: 3)
-                    let changed = gray(px, x, y, width: W) != 200
-                    XCTAssertEqual(changed, on, "(\(x),\(y)) \(direction)")
-                    if on { covered += 1 }
+                    var expected = 200
+                    if direction != .slash {
+                        switch StoryTextureEffects.bandState(x: x, y: y, spacing: 8, thickness: 4, highlight: h, slash: false, phase: 3) {
+                        case StoryTextureEffects.bandDark: expected = Int(luts.dark[expected])
+                        case StoryTextureEffects.bandLight: expected = Int(luts.light[expected])
+                        default: break
+                        }
+                    }
+                    if direction != .backslash {
+                        switch StoryTextureEffects.bandState(x: x, y: y, spacing: 8, thickness: 4, highlight: h, slash: true, phase: cross ? 5 : 3) {
+                        case StoryTextureEffects.bandDark: expected = Int(luts.dark[expected])
+                        case StoryTextureEffects.bandLight: expected = Int(luts.light[expected])
+                        default: break
+                        }
+                    }
+                    let got = gray(px, x, y, width: W)
+                    XCTAssertEqual(got, expected, "(\(x),\(y)) \(direction)")
+                    if got < 200 { dark += 1 } else if got > 200 { light += 1 }
                 }
             }
-            let share = Double(covered) / Double(W * H)
-            let expected = direction == .cross ? 1 - pow(4.0 / 6.0, 2) : 2.0 / 6.0
-            XCTAssertEqual(share, expected, accuracy: 0.03, "cobertura \(direction)")
+            if !cross {
+                XCTAssertEqual(Double(dark) / Double(W * H), 0.5, accuracy: 0.01, "faixa escura = 4 de cada 8 px")
+                XCTAssertEqual(Double(light) / Double(W * H), 0.125, accuracy: 0.01, "realce = 1 de cada 8 px")
+            }
+            XCTAssertGreaterThan(light, 0, "tem faixa de realce claro")
+            XCTAssertGreaterThan(dark, 0)
         }
+    }
+
+    func testBackslashAndSlashHaveExactlyTheSameStrength() {
+        let W = 96, H = 80
+        var back = buffer(W, H, 150), fwd = buffer(W, H, 150)
+        StoryTextureEffects.applyLines(&back, width: W, height: H, params: linesParams(.backslash))
+        StoryTextureEffects.applyLines(&fwd, width: W, height: H, params: linesParams(.slash))
+        func histogram(_ px: [UInt8]) -> [Int: Int] {
+            var h: [Int: Int] = [:]
+            for i in 0..<(W * H) { h[Int(px[i * 4 + 1]), default: 0] += 1 }
+            return h
+        }
+        XCTAssertEqual(histogram(back), histogram(fwd), "mesma quantidade de pixels em cada tom: \\ e / pesam igual")
+        // espelhar na horizontal troca uma pela outra (a fase muda, a força não)
+        var mirrored = [UInt8](repeating: 0, count: back.count)
+        for y in 0..<H { for x in 0..<W {
+            let a = (y * W + x) * 4, b = (y * W + (W - 1 - x)) * 4
+            for c in 0..<4 { mirrored[b + c] = back[a + c] }
+        } }
+        XCTAssertEqual(histogram(mirrored), histogram(fwd))
+    }
+
+    func testLinesAreClearlyVisibleOnDarkMidAndLightColours() {
+        let luts = StoryTextureEffects.lineLUTs(blend: .hardLight, opacity: StoryTexture.lineAlpha(level: 0.5))
+        for v in 0..<256 {
+            let delta = max(abs(Int(luts.dark[v]) - v), abs(Int(luts.light[v]) - v))
+            XCTAssertGreaterThanOrEqual(delta, 30, "em \(v) pelo menos uma das faixas se destaca (a escura nas luzes, o realce nas sombras)")
+        }
+        // preto puro: só o realce aparece; branco puro: só a faixa escura aparece
+        XCTAssertEqual(Int(luts.dark[0]), 0)
+        XCTAssertGreaterThan(Int(luts.light[0]), 60)
+        XCTAssertEqual(Int(luts.light[255]), 255)
+        XCTAssertLessThan(Int(luts.dark[255]), 150)
+    }
+
+    func testCrossKeepsTheOverallBrightnessCloseToASingleDirection() {
+        let W = 96, H = 80
+        func mean(_ px: [UInt8]) -> Double {
+            var sum = 0
+            for i in 0..<(W * H) { sum += Int(px[i * 4 + 1]) }
+            return Double(sum) / Double(W * H)
+        }
+        var params = linesParams(.backslash)
+        params.lineOpacity = StoryTexture.lineAlpha(level: 0.5)
+        var single = buffer(W, H, 128), cross = buffer(W, H, 128)
+        StoryTextureEffects.applyLines(&single, width: W, height: H, params: params)
+        params.lineDirection = .cross
+        StoryTextureEffects.applyLines(&cross, width: W, height: H, params: params)
+        let ms = mean(single), mc = mean(cross)
+        print("brilho médio de 128: uma direção \(ms) · X \(mc)")
+        XCTAssertGreaterThan(ms, 85); XCTAssertLessThan(ms, 128)
+        XCTAssertGreaterThan(mc, 85); XCTAssertLessThan(mc, 128)
+        XCTAssertLessThan(abs(mc - ms), 12, "o X não escurece nem estoura mais que uma direção")
+        XCTAssertNotEqual(single, cross)
+    }
+
+    func testLineCurveMatchesTheRequestedFeel() {
+        XCTAssertEqual(StoryTexture.lineAlpha(level: 0), 0)
+        XCTAssertEqual(StoryTexture.lineAlpha(level: 1), StoryTexture.lineOpacityCap, accuracy: 1e-9)
+        var last = -1.0
+        for i in 0...100 {
+            let a = StoryTexture.lineAlpha(level: Double(i) / 100)
+            XCTAssertGreaterThanOrEqual(a, last, "a curva só sobe")
+            XCTAssertLessThanOrEqual(a, StoryTexture.lineOpacityCap + 1e-9)
+            last = a
+        }
+        XCTAssertGreaterThan(StoryTexture.lineAlpha(level: 0.10), 0.12, "10% já é visível")
+        XCTAssertLessThan(StoryTexture.lineAlpha(level: 0.25), 0.40, "25% ainda é sutil")
+        XCTAssertEqual(StoryTexture.lineAlpha(level: 0.5), 0.52, accuracy: 0.05, "50%: bem marcado")
+        XCTAssertGreaterThan(StoryTexture.lineAlpha(level: 0.8), 0.68, "80% a 100%: forte")
+        XCTAssertLessThan(StoryTexture.lineAlpha(level: 1), 0.9, "mas o texto continua legível")
+    }
+
+    func testLinePhaseChangesFromImageToImage() {
+        var o = textureOptions
+        o.texturePreset = .balanced
+        var phases = Set<Int>()
+        for seed in 1...60 { phases.insert(StoryParams.sample(o, seed: UInt64(seed)).linePhase) }
+        XCTAssertGreaterThanOrEqual(phases.count, 5, "a fase muda de imagem para imagem: \(phases.sorted())")
+        XCTAssertTrue(phases.allSatisfy { (0..<8).contains($0) })
+        o.texturePreset = .intense
+        var phases2 = Set<Int>()
+        for seed in 1...60 {
+            let p = StoryParams.sample(o, seed: UInt64(seed))
+            XCTAssertLessThan(p.linePhase2, p.lineSpacing)
+            phases2.insert(p.linePhase2)
+        }
+        XCTAssertGreaterThanOrEqual(phases2.count, 5, "no X a segunda diagonal também muda")
     }
 
     func testBackslashRunsTopLeftToBottomRightAndSlashTheOtherWay() {
@@ -283,21 +411,31 @@ final class StoryTextureTests: XCTestCase {
     }
 
     func testLineBlendModesAndOpacity() {
-        let off = StoryTextureEffects.lineLUT(blend: .multiply, opacity: 0)
-        XCTAssertEqual(off, (0..<256).map { UInt8($0) }, "opacidade 0 não muda nada")
-        let mult = StoryTextureEffects.lineLUT(blend: .multiply, opacity: 1)
-        XCTAssertEqual(Int(mult[200]), 0)
-        let half = StoryTextureEffects.lineLUT(blend: .multiply, opacity: 0.5)
-        XCTAssertEqual(Double(half[200]), 100, accuracy: 1)
-        let overlay = StoryTextureEffects.lineLUT(blend: .overlay, opacity: 1)
-        XCTAssertEqual(Double(overlay[200]), 145, accuracy: 1, "luzes: 2·b − 1")
-        XCTAssertEqual(Int(overlay[100]), 0, "sombras: 2·b·0")
-        let soft = StoryTextureEffects.lineLUT(blend: .softLight, opacity: 1)
-        XCTAssertEqual(Double(soft[128]), 64, accuracy: 1, "soft-light: b²")
+        let off = StoryTextureEffects.lineLUTs(blend: .hardLight, opacity: 0)
+        XCTAssertEqual(off.dark, (0..<256).map { UInt8($0) }, "opacidade 0 não muda nada")
+        XCTAssertEqual(off.light, (0..<256).map { UInt8($0) })
+        let full = StoryTextureEffects.lineLUTs(blend: .hardLight, opacity: 1)
+        XCTAssertEqual(Int(full.dark[200]), 0, "hard-light: faixa escura = tinta preta")
+        XCTAssertEqual(Double(full.light[100]), 193, accuracy: 1, "realce = 60% da opacidade, tinta branca")
+        let half = StoryTextureEffects.lineLUTs(blend: .hardLight, opacity: 0.5)
+        XCTAssertEqual(Double(half.dark[200]), 100, accuracy: 1)
+        let overlay = StoryTextureEffects.lineLUTs(blend: .overlay, opacity: 1)
+        XCTAssertEqual(Double(overlay.dark[200]), 145, accuracy: 1, "overlay, luzes: 2·b − 1")
+        XCTAssertEqual(Int(overlay.dark[100]), 0, "overlay, sombras: 2·b·0")
+        XCTAssertEqual(Double(overlay.light[100]), 160, accuracy: 1, "overlay, sombras do realce: 2·b")
+        XCTAssertEqual(Double(overlay.light[200]), 233, accuracy: 1, "overlay, luzes do realce: 1")
+        let cross = StoryTextureEffects.lineLUTs(blend: .hardLight, opacity: 1, cross: true)
+        XCTAssertEqual(Double(cross.dark[200]), 200 * (1 - StoryTexture.lineCrossBalance), accuracy: 1, "no X cada camada usa só parte da opacidade")
         for blend in StoryLineBlend.allCases {
-            let l = StoryTextureEffects.lineLUT(blend: blend, opacity: 0.6)
-            for v in 1..<256 { XCTAssertGreaterThanOrEqual(l[v], l[v - 1], "\(blend) é crescente") }
-            for v in 0..<256 { XCTAssertLessThanOrEqual(Int(l[v]), v, "\(blend) só escurece") }
+            let l = StoryTextureEffects.lineLUTs(blend: blend, opacity: 0.6)
+            for v in 1..<256 {
+                XCTAssertGreaterThanOrEqual(l.dark[v], l.dark[v - 1], "\(blend) escura é crescente")
+                XCTAssertGreaterThanOrEqual(l.light[v], l.light[v - 1], "\(blend) realce é crescente")
+            }
+            for v in 0..<256 {
+                XCTAssertLessThanOrEqual(Int(l.dark[v]), v, "\(blend): a faixa escura só escurece")
+                XCTAssertGreaterThanOrEqual(Int(l.light[v]), v, "\(blend): o realce só clareia")
+            }
         }
     }
 
@@ -472,7 +610,7 @@ final class StoryTextureTests: XCTestCase {
         XCTAssertEqual(lined.image.height, 1920)
         var checked = 0
         for (x, y) in [(10, 10), (11, 10), (12, 10), (13, 10), (14, 10), (15, 10), (500, 900), (501, 900), (502, 900), (503, 900)] {
-            let on = StoryTextureEffects.isLine(x: x, y: y, spacing: 6, thickness: 2, direction: .backslash, phase: 3)
+            let on = StoryTextureEffects.bandState(x: x, y: y, spacing: 8, thickness: 4, highlight: 1, slash: false, phase: 3) != StoryTextureEffects.bandNone
             let changed = gray(lined.pixels, x, y, width: 1080) != gray(neutral.pixels, x, y, width: 1080)
             XCTAssertEqual(changed, on, "(\(x),\(y))")
             checked += 1
@@ -565,6 +703,70 @@ final class StoryTextureTests: XCTestCase {
         let avg = timings.reduce(0, +) / Double(timings.count)
         print("Otimizador: texturas \(String(format: "%.3f", avg)) s por imagem (1080×1920, \(timings.count) amostras)")
         XCTAssertLessThan(avg, 8, "as texturas não podem deixar o lote lento")
+    }
+
+    /// Amostras só das linhas: 5 níveis do slider × 3 direções, em 1:1, e uma folha ampliada para conferir pixel a pixel.
+    func testLineLevelsAndDirectionsSamples() throws {
+        let base = try StoryOptimizer.rasterize(compose(creative(), StoryParams()))
+        let levels: [Double] = [0.10, 0.25, 0.50, 0.80, 1.0]
+        let directions: [StoryLineDirection] = [.backslash, .slash, .cross]
+        let tile = CGSize(width: 270, height: 165)
+        let crop = CGRect(x: 270, y: 800, width: tile.width, height: tile.height)
+        func lined(_ direction: StoryLineDirection, _ level: Double) throws -> CGImage {
+            var p = StoryParams()
+            p.lineOpacity = StoryTexture.lineAlpha(level: level)
+            p.lineSpacing = 8
+            p.lineThickness = 3
+            p.lineDirection = direction
+            p.lineBlend = .hardLight
+            p.linePhase = 2
+            p.linePhase2 = 6
+            XCTAssertTrue(p.needsRasterPass)
+            return try XCTUnwrap(StoryOptimizer.applyTexture(base, params: p).image.cropping(to: crop))
+        }
+        var tiles: [[CGImage]] = []
+        for d in directions { tiles.append(try levels.map { try lined(d, $0) }) }
+        let sheet = makeImage(Int(tile.width) * levels.count, Int(tile.height) * directions.count) { ctx in
+            ctx.interpolationQuality = .none
+            for (r, row) in tiles.enumerated() {
+                for (c, img) in row.enumerated() {
+                    ctx.draw(img, in: CGRect(x: CGFloat(c) * tile.width, y: CGFloat(directions.count - 1 - r) * tile.height, width: tile.width, height: tile.height))
+                }
+            }
+        }
+        let zoomPicks: [(StoryLineDirection, Double)] = [(.backslash, 0.5), (.slash, 0.5), (.cross, 0.5), (.cross, 1.0)]
+        let zoomCrop = CGRect(x: 40, y: 20, width: 90, height: 60)
+        let zoomImages = try zoomPicks.map { try XCTUnwrap(lined($0.0, $0.1).cropping(to: zoomCrop)) }
+        let zoom = makeImage(1080, 720) { ctx in
+            ctx.interpolationQuality = .none
+            for (n, img) in zoomImages.enumerated() {
+                let col = n % 2, row = 1 - n / 2
+                ctx.draw(img, in: CGRect(x: col * 540, y: row * 360, width: 540, height: 360))
+            }
+        }
+        for (name, img) in [("linhas-niveis", sheet), ("linhas-zoom-6x", zoom)] {
+            let url = write(img, "\(name).jpg", type: .jpeg, quality: 0.95)
+            try? FileManager.default.copyItem(at: url, to: Self.samples.appendingPathComponent("\(name).jpg"))
+            try printBase64(name, url)
+        }
+        // o nível 100% é bem mais forte que o 10%, e o X não passa dos extremos
+        let low = try lined(.backslash, 0.10), high = try lined(.backslash, 1.0)
+        func contrast(_ img: CGImage) -> Double {
+            var data = [UInt8](repeating: 0, count: img.width * img.height * 4)
+            data.withUnsafeMutableBytes { raw in
+                if let ctx = CGContext(data: raw.baseAddress, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: img.width * 4,
+                                       space: StoryOptimizer.srgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) {
+                    ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+                }
+            }
+            var sum = 0.0
+            for y in 0..<img.height { for x in 1..<img.width {
+                sum += abs(Double(data[(y * img.width + x) * 4 + 1]) - Double(data[(y * img.width + x - 1) * 4 + 1]))
+            } }
+            return sum / Double(img.width * img.height)
+        }
+        print("contraste local: 10% \(contrast(low)) · 100% \(contrast(high))")
+        XCTAssertGreaterThan(contrast(high), contrast(low) * 2, "100% é bem mais marcado que 10%")
     }
 
     func testTextureFileIsReproducibleFromTheSameSeed() throws {

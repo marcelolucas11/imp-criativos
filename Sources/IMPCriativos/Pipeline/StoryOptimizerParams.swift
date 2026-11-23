@@ -335,19 +335,20 @@ enum StoryLineDirection: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Modo de mistura das linhas com a imagem.
+/// Modo de mistura das linhas com a imagem (beta.24: só os de alto impacto; Multiply e Soft-light saíram).
+/// As linhas são faixas de contraste duplo: uma faixa escura (tinta preta) e, colada nela, uma faixa fina de realce claro (tinta branca).
 enum StoryLineBlend: String, CaseIterable, Identifiable, Codable {
+    /// Hard-light com tinta preta e branca: multiplica nas faixas escuras e faz screen nas de realce. Aparece em qualquer cor.
+    case hardLight
+    /// Overlay: o contraste da própria imagem decide (mais forte nas luzes para a faixa escura e nas sombras para o realce).
     case overlay
-    case multiply
-    case softLight
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
+        case .hardLight: return "Hard-light"
         case .overlay: return "Overlay"
-        case .multiply: return "Multiply"
-        case .softLight: return "Soft-light"
         }
     }
 }
@@ -388,11 +389,12 @@ struct StoryTexture: Codable, Equatable {
     /// Linhas diagonais por cima da imagem (pixel exato, sem reamostragem).
     var lines = false
     var lineDirection: StoryLineDirection = .random
-    /// Opacidade (0–100%). 100% = linhas bem marcadas, mas nunca pretas por inteiro (teto de 85%).
-    var lineOpacityPercent = 40.0
-    var lineSpacing = 6.0
-    var lineThickness = 1.0
-    var lineBlend: StoryLineBlend = .overlay
+    /// Intensidade (0–100%), com curva própria (ver `lineAlpha`): 10–25% visível e sutil, 50% bem marcado, 80–100% forte.
+    var lineOpacityPercent = 50.0
+    /// Em pixels da saída 1080×1920, medidos na horizontal. Espaçamento = período das linhas; espessura = faixa escura.
+    var lineSpacing = 8.0
+    var lineThickness = 3.0
+    var lineBlend: StoryLineBlend = .hardLight
     /// Serrilhado: quebra o anti-aliasing só nas bordas de alto contraste (texto, botões).
     var jitter = false
     var jitterPercent = 40.0
@@ -404,11 +406,26 @@ struct StoryTexture: Codable, Equatable {
     var bloomPercent = 30.0
 
     static let percentRange: ClosedRange<Double> = 0...100
-    static let spacingRange: ClosedRange<Double> = 2...12
-    static let thicknessRange: ClosedRange<Double> = 1...3
+    static let spacingRange: ClosedRange<Double> = 4...18
+    static let thicknessRange: ClosedRange<Double> = 2...8
     static let aberrationMaxPixels = 6
-    /// Teto da opacidade das linhas (a leitura do texto não some mesmo com o slider em 100%).
+    /// Teto da opacidade da faixa escura (a leitura do texto não some mesmo com o slider em 100%).
     static let lineOpacityCap = 0.85
+    /// A faixa de realce claro tem 60% da opacidade da escura.
+    static let lineHighlightRatio = 0.6
+    /// No modo Cruzada (X) cada camada usa 65% da opacidade, para a malha não escurecer nem estourar a imagem.
+    static let lineCrossBalance = 0.65
+
+    /// Curva do slider (0 a 1) → opacidade da faixa escura: 10% ≈ 0,17 · 25% ≈ 0,32 · 50% ≈ 0,52 · 80% ≈ 0,73 · 100% = 0,85.
+    static func lineAlpha(level: Double) -> Double {
+        let l = min(max(level.isFinite ? level : 0, 0), 1)
+        return lineOpacityCap * pow(l, 0.7)
+    }
+
+    /// Largura da faixa de realce: um terço da escura (mínimo 1px), sempre sobrando pelo menos 1px de intervalo.
+    static func lineHighlightWidth(spacing: Int, thickness: Int) -> Int {
+        max(1, min(Int((Double(thickness) / 3).rounded()), spacing - thickness - 1))
+    }
 
     static let none = StoryTexture()
 
@@ -422,10 +439,10 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .random
-        t.lineOpacityPercent = 15
-        t.lineSpacing = 8
-        t.lineThickness = 1
-        t.lineBlend = .softLight
+        t.lineOpacityPercent = 20
+        t.lineSpacing = 12
+        t.lineThickness = 2
+        t.lineBlend = .hardLight
         t.jitter = true
         t.jitterPercent = 15
         t.aberration = true
@@ -438,10 +455,10 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .random
-        t.lineOpacityPercent = 40
-        t.lineSpacing = 5
-        t.lineThickness = 1
-        t.lineBlend = .overlay
+        t.lineOpacityPercent = 50
+        t.lineSpacing = 8
+        t.lineThickness = 3
+        t.lineBlend = .hardLight
         t.jitter = true
         t.jitterPercent = 45
         t.aberration = true
@@ -454,10 +471,10 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .cross
-        t.lineOpacityPercent = 70
-        t.lineSpacing = 4
-        t.lineThickness = 2
-        t.lineBlend = .overlay
+        t.lineOpacityPercent = 85
+        t.lineSpacing = 8
+        t.lineThickness = 4
+        t.lineBlend = .hardLight
         t.jitter = true
         t.jitterPercent = 80
         t.aberration = true
@@ -473,7 +490,8 @@ struct StoryTexture: Codable, Equatable {
         var t = self
         t.lineOpacityPercent = c(lineOpacityPercent, Self.percentRange)
         t.lineSpacing = c(lineSpacing, Self.spacingRange).rounded()
-        t.lineThickness = min(c(lineThickness, Self.thicknessRange).rounded(), t.lineSpacing - 1)
+        // pelo menos 2px de folga: sobra espaço para a faixa de realce e para um intervalo
+        t.lineThickness = max(Self.thicknessRange.lowerBound, min(c(lineThickness, Self.thicknessRange).rounded(), t.lineSpacing - 2))
         t.jitterPercent = c(jitterPercent, Self.percentRange)
         t.aberrationPercent = c(aberrationPercent, Self.percentRange)
         t.bloomPercent = c(bloomPercent, Self.percentRange)
@@ -632,12 +650,15 @@ struct StoryParams: Equatable {
     var vignette: Double = 0
     /// 1.0.0-beta.23: linhas diagonais (opacidade 0–1 já com o teto aplicado; 0 = desligado). A direção nunca é `random` aqui:
     /// o sorteio já escolheu \, / ou X para esta imagem.
+    /// beta.24: opacidade da faixa ESCURA (já pela curva do slider); a de realce claro usa `lineHighlightRatio` dela.
     var lineOpacity: Double = 0
-    var lineSpacing = 6
-    var lineThickness = 1
+    var lineSpacing = 8
+    var lineThickness = 3
     var lineDirection: StoryLineDirection = .backslash
-    var lineBlend: StoryLineBlend = .overlay
+    var lineBlend: StoryLineBlend = .hardLight
+    /// Deslocamento aleatório das linhas nesta imagem (0 a espaçamento − 1). No X, a segunda diagonal tem a própria fase.
     var linePhase = 0
+    var linePhase2 = 0
     /// 1.0.0-beta.23: serrilhado das bordas (nível 0–1; 0 = desligado) e semente do jitter de linhas/colunas.
     var jitterLevel: Double = 0
     var jitterSeed: UInt64 = 0
@@ -746,9 +767,10 @@ struct StoryParams: Equatable {
         }
         if a.vignette { p.vignette = vig }
         if t.lines, t.lineOpacityPercent > 0 {
-            p.lineOpacity = level(t.lineOpacityPercent, lineLevelU) * StoryTexture.lineOpacityCap
-            p.lineSpacing = Int(t.lineSpacing)
-            p.lineThickness = max(1, min(Int(t.lineThickness), p.lineSpacing - 1))
+            // linhas variam pouco entre imagens (90% a 100% do nível): têm que aparecer em todas
+            p.lineOpacity = StoryTexture.lineAlpha(level: t.lineOpacityPercent / 100 * (0.9 + 0.1 * lineLevelU))
+            p.lineSpacing = max(4, Int(t.lineSpacing))
+            p.lineThickness = max(2, min(Int(t.lineThickness), p.lineSpacing - 2))
             p.lineBlend = t.lineBlend
             switch t.lineDirection {
             case .backslash, .slash, .cross: p.lineDirection = t.lineDirection
@@ -757,6 +779,7 @@ struct StoryParams: Equatable {
                 p.lineDirection = choices[min(2, Int(lineDirU * 3))]
             }
             p.linePhase = min(p.lineSpacing - 1, Int(linePhaseU * Double(p.lineSpacing)))
+            p.linePhase2 = Int((jitterSeed >> 11) % UInt64(p.lineSpacing))
         }
         if t.jitter, t.jitterPercent > 0 {
             p.jitterLevel = level(t.jitterPercent, jitterLevelU)
