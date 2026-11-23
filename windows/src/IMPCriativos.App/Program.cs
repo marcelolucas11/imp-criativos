@@ -24,6 +24,7 @@ public static class Program
             return SmokeTest.Run(folder);
         }
 
+        Toast.RegisterProcess();
         var single = new SingleInstance();
         if (!single.IsFirst)
         {

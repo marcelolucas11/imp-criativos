@@ -51,7 +51,7 @@ Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDesc
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\IMP Criativos"; Filename: "{app}\IMP Criativos.exe"
+Name: "{autoprograms}\IMP Criativos"; Filename: "{app}\IMP Criativos.exe"; AppUserModelID: "ImperaServices.IMPCriativos"
 Name: "{autodesktop}\IMP Criativos"; Filename: "{app}\IMP Criativos.exe"; Tasks: desktopicon
 
 [Run]

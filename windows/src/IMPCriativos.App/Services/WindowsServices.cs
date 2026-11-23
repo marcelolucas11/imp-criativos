@@ -138,17 +138,39 @@ public static class StartupItem
 
 /// <summary>Notificações: toast do Windows; se falhar, balão do ícone da bandeja.</summary>
 /// <summary>
-/// Notificação de "lote terminou": balão do ícone da bandeja, que o Windows 10/11 mostra como notificação
-/// (Central de Ações) com o nome e o ícone do app.
+/// Notificação de "lote terminou": toast do Windows (com o AppUserModelID do atalho criado pelo instalador);
+/// se o Windows recusar, balão do ícone da bandeja.
 /// </summary>
 public static class Toast
 {
-    public static Action<string, string>? Handler { get; set; }
+    public const string AppId = "ImperaServices.IMPCriativos";
+
+    /// <summary>Balão da bandeja, usado quando o toast falha.</summary>
+    public static Action<string, string>? Fallback { get; set; }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
+
+    public static void RegisterProcess()
+    {
+        try { SetCurrentProcessExplicitAppUserModelID(AppId); } catch { }
+    }
 
     public static void Post(string title, string body)
     {
-        try { Handler?.Invoke(title, body); } catch { }
+        try
+        {
+            var xml = new Windows.Data.Xml.Dom.XmlDocument();
+            xml.LoadXml($"<toast><visual><binding template=\"ToastGeneric\"><text>{Escape(title)}</text><text>{Escape(body)}</text></binding></visual></toast>");
+            Windows.UI.Notifications.ToastNotificationManager.CreateToastNotifier(AppId).Show(new Windows.UI.Notifications.ToastNotification(xml));
+        }
+        catch
+        {
+            try { Fallback?.Invoke(title, body); } catch { }
+        }
     }
+
+    private static string Escape(string s) => System.Security.SecurityElement.Escape(s) ?? "";
 }
 
 /// <summary>Seletores de pasta e arquivo do Windows.</summary>

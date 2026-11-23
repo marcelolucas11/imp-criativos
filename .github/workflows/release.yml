@@ -127,3 +127,96 @@ jobs:
           name: release-build-log
           path: build.log
           retention-days: 7
+
+  # 1.0.0-beta.27: versão Windows. Roda depois do Mac (needs: release); se falhar, o Mac já está publicado.
+  # Regra: a Release versionada só tem UM .zip (o do Mac, que o atualizador do Mac usa). O Windows sobe .exe e .exe.sha256.
+  windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Versão
+        shell: bash
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+          echo "SETUP=IMP-Criativos-Setup-$VERSION-windows-x64.exe" >> "$GITHUB_ENV"
+
+      - name: Cache da libjpeg-turbo (Windows)
+        uses: actions/cache@v4
+        with:
+          path: windows/vendor/libjpeg-turbo
+          key: ljt-win-${{ runner.os }}-${{ hashFiles('scripts/build_libjpeg_turbo.sh', 'scripts/build_libjpeg_turbo_windows.ps1') }}
+
+      - name: Compilar libjpeg-turbo (turbojpeg.dll)
+        shell: pwsh
+        run: scripts/build_libjpeg_turbo_windows.ps1
+
+      - name: Testes
+        env:
+          IMP_TURBOJPEG_DIR: ${{ github.workspace }}\windows\vendor\libjpeg-turbo\win-x64
+        run: dotnet test windows/tests/IMPCriativos.Tests/IMPCriativos.Tests.csproj -c Release
+
+      - name: Publicar o app e gerar o instalador
+        shell: pwsh
+        run: windows/build/publish.ps1
+
+      - name: Teste de fumaça
+        shell: pwsh
+        run: windows/build/smoke.ps1
+
+      - name: Enviar para a Release (sem .zip)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd windows/artifacts/dist
+          ls -la
+          if ls *.zip >/dev/null 2>&1; then echo "Nada de .zip do Windows na Release"; exit 1; fi
+          gh release upload "$TAG" "$SETUP" "$SETUP.sha256" --clobber
+
+      # Link fixo do botão "Baixar para Windows" do README:
+      #   releases/download/windows/IMP-Criativos-Setup.exe  →  sempre a versão mais nova (inclusive beta).
+      # A tag "windows" não é número de versão e não tem .zip: os dois atualizadores a ignoram.
+      - name: Atualizar link fixo de download (Windows)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "windows/artifacts/dist/$SETUP" windows/artifacts/dist/IMP-Criativos-Setup.exe
+          NOTES="Link fixo usado pelo botão **Baixar para Windows** do README. Sempre contém a versão mais nova.
+
+          Versão atual: **$VERSION** · [notas desta versão](https://github.com/${{ github.repository }}/releases/tag/$TAG)"
+          if gh release view windows >/dev/null 2>&1; then
+            gh release upload windows windows/artifacts/dist/IMP-Criativos-Setup.exe --clobber
+            gh release edit windows --notes "$NOTES" --prerelease --latest=false
+          else
+            gh release create windows --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Download Windows — sempre a versão mais nova" --notes "$NOTES" windows/artifacts/dist/IMP-Criativos-Setup.exe
+          fi
+
+      - name: Linha de instalação do Windows nas notas
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" --json body --jq .body > notes.md
+          if ! grep -q "Instalar no Windows" notes.md; then
+            printf '\n**Instalar no Windows:** baixe o `%s` e abra. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo** (o app não é assinado). Windows 10 (2004 ou mais novo) ou 11, 64 bits.\n' "$SETUP" >> notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+
+      - name: Capturas do teste de fumaça
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-windows-release
+          path: windows/artifacts/smoke
+          if-no-files-found: ignore
+          retention-days: 14

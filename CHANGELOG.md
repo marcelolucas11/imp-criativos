@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## [1.0.0-beta.27] — 2026-11-23
+
+**Primeira versão para Windows**
+
+O IMP Criativos agora também roda no Windows 10 (2004 ou mais novo) e no Windows 11, 64 bits, com as mesmas funções, os mesmos textos em português e os mesmos prompts de IA do Mac. A versão do Mac não mudou.
+
+- **Botão "Baixar para Windows"** no README, ao lado do "Baixar para Mac". Link fixo: `releases/download/windows/IMP-Criativos-Setup.exe` (sempre a versão mais nova).
+- **Instalador por usuário** (Inno Setup), sem pedir administrador: instala em `%LOCALAPPDATA%\Programs\IMP Criativos`, cria o atalho no Menu Iniciar (e, se quiser, na Área de Trabalho). Desinstalar não apaga lotes, clientes nem chaves.
+- **Tudo do Mac:** lotes com limpeza e variações (Gemini ou GPT), Limpar logo, Teste de eixos, instruções por lote, revisão (aprovar, refazer com observação, descartar), Baixar aprovados, Clientes com os 50 eixos e Meus eixos, Otimizador em Lote (Stories 9:16) com o inspetor Antes / Depois, Histórico, Configurações, bandeja do Windows (no lugar da barra de menus), iniciar com o Windows e atualização dentro do app.
+- **Atalhos:** ⌘ vira Ctrl (Ctrl+N novo lote, Ctrl+Shift+L limpar logo, Ctrl+Shift+O otimizador, Ctrl+, configurações).
+- **Chaves de API** cifradas pelo Windows (DPAPI) só para a sua conta, em `%LOCALAPPDATA%\IMP Criativos\chaves.json`.
+- **Arquivos compatíveis:** um `.impcliente` exportado no Mac abre no Windows e vice-versa.
+- **Otimizador:** mesma libjpeg-turbo do Mac e o mesmo sorteio (a mesma semente dá os mesmos parâmetros nos dois sistemas). No Windows, a mesma semente gera exatamente o mesmo arquivo.
+- **Diferenças do Windows:** a leitura de texto local usa o OCR do Windows (precisa do idioma Português instalado; sem ele, a conferência local é pulada e a checagem por IA continua); HEIC precisa das Extensões de Imagem HEIF da Microsoft Store; os sinais de risco do modo rápido no Windows são o disco quase cheio e a bateria fraca (não há sensor de temperatura).
+- **CI:** compila e testa no Windows e no Linux, confere os eixos gerados, compara os prompts e o sorteio com o código Swift e roda um teste de fumaça que abre cada tela e salva capturas.
+
 ## [1.0.0-beta.26] — 2026-11-23
 
 **Otimizador em Lote: as linhas são escolhidas antes do nível**

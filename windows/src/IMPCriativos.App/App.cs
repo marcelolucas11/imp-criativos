@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Threading;
 using IMPCriativos.App.Services;
+using IMPCriativos.App.UI;
+using IMPCriativos.Core.Models;
 using IMPCriativos.Core.Imaging;
 using IMPCriativos.Core.Pipeline;
 using IMPCriativos.Core.Providers;
@@ -60,7 +62,7 @@ public sealed class App : Application
         {
             if (e.PropertyName == nameof(model.Settings.RunInBackground)) Dispatcher.Invoke(() => Tray.Visible = model.Settings.RunInBackground);
         };
-        Toast.Handler = (t, b) => Dispatcher.BeginInvoke(() => Tray?.Balloon(t, b));
+        Toast.Fallback = (t, b) => Dispatcher.BeginInvoke(() => Tray?.Balloon(t, b));
 
         _single?.Listen(() => Dispatcher.BeginInvoke(() => ShowMain()));
 
