@@ -63,7 +63,7 @@ struct StoryInspectorView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
         }
-        .frame(minWidth: 980, idealWidth: 1180, minHeight: 760, idealHeight: 900)
+        .frame(minWidth: 1100, idealWidth: 1180, minHeight: 700, idealHeight: 820)
         .onAppear { batch.inspecting = true }
         .onDisappear { batch.inspecting = false }
     }
@@ -75,30 +75,22 @@ struct StoryInspectorView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 190)
+            .frame(width: 180)
 
             Picker("Zoom", selection: $zoom) {
                 ForEach(StoryInspectZoom.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 270)
+            .frame(width: 260)
 
             Picker("Antes", selection: $beforeKind) {
                 ForEach(StoryInspectBefore.allCases) { Text($0.label).tag($0) }
             }
-            .frame(width: 250)
+            .frame(width: 240)
             .help("Original enquadrado: a imagem sem nenhuma variação. Sem as texturas: tudo igual ao arquivo final, menos linhas, serrilhado, aberração e bloom.")
 
             Spacer(minLength: 8)
-
-            if batch.options.versions > 1 {
-                Stepper(value: $batch.previewVersion, in: 1...batch.options.versions) {
-                    Text("Versão \(batch.previewVersion)/\(batch.options.versions)").font(.caption).monospacedDigit()
-                }
-                .controlSize(.small)
-                .disabled(batch.running)
-            }
 
             Button {
                 if let id = batch.selectedID { batch.reroll(id) }
@@ -120,6 +112,13 @@ struct StoryInspectorView: View {
                     Text(item.url.lastPathComponent).font(.caption.weight(.medium)).lineLimit(1).truncationMode(.middle)
                 }
                 if batch.previewLoading { ProgressView().controlSize(.mini) }
+                if batch.options.versions > 1 {
+                    Stepper(value: $batch.previewVersion, in: 1...batch.options.versions) {
+                        Text("Versão \(batch.previewVersion) de \(batch.options.versions)").font(.caption).monospacedDigit()
+                    }
+                    .controlSize(.small)
+                    .disabled(batch.running)
+                }
                 Spacer()
                 Text(mode == .curtain
                      ? "Arraste a barra para comparar · arraste a imagem para mover (com zoom)"
