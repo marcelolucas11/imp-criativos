@@ -34,9 +34,11 @@ final class StoryTextureTests: XCTestCase {
 
     private func gray(_ px: [UInt8], _ x: Int, _ y: Int, width: Int) -> Int { Int(px[(y * width + x) * 4 + 1]) }
 
+    /// Opções com as linhas ligadas (Tom, direção aleatória) e o nível de texturas ainda em Desligado.
     private var textureOptions: StoryOptions {
         var o = StoryOptions()
         o.fit = .cover
+        o.linesEnabled = true
         return o
     }
 
@@ -107,9 +109,11 @@ final class StoryTextureTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(max(abs(b.aberrationDX), abs(b.aberrationDY)), 1)
 
             o.texturePreset = .intense
+            o.lineStyle = .ink
+            o.lineDirection = .cross
             let i = StoryParams.sample(o, seed: UInt64(seed))
             XCTAssertEqual(i.lineDirection, .cross)
-            XCTAssertEqual(i.lineStyle, .ink, "Intenso continua em gravura preto e branco")
+            XCTAssertEqual(i.lineStyle, .ink)
             XCTAssertEqual(i.lineThickness, 4)
             XCTAssertEqual(i.lineSpacing, 8)
             XCTAssertGreaterThanOrEqual(i.bloomLevel, 0.7 * 0.7 - 1e-9)
@@ -132,7 +136,7 @@ final class StoryTextureTests: XCTestCase {
         o.texturePreset = .custom
         o.customTexture = .balanced
         for direction in [StoryLineDirection.backslash, .slash, .cross] {
-            o.customTexture.lineDirection = direction
+            o.lineDirection = direction
             for seed in 1...20 { XCTAssertEqual(StoryParams.sample(o, seed: UInt64(seed)).lineDirection, direction) }
         }
     }
@@ -163,7 +167,7 @@ final class StoryTextureTests: XCTestCase {
         var o = textureOptions
         o.texturePreset = .custom
         o.customTexture = .intense
-        o.customTexture.lines = false
+        o.linesEnabled = false
         var p = StoryParams.sample(o, seed: 5)
         XCTAssertEqual(p.lineOpacity, 0)
         XCTAssertGreaterThan(p.jitterLevel, 0)
@@ -177,7 +181,8 @@ final class StoryTextureTests: XCTestCase {
         XCTAssertFalse(p.hasTexture)
         XCTAssertFalse(o.texture.isActive)
         o.customTexture = .intense
-        o.customTexture.lineOpacityPercent = 0
+        o.linesEnabled = true
+        o.customToneLines.opacityPercent = 0
         XCTAssertEqual(StoryParams.sample(o, seed: 5).lineOpacity, 0, "slider em 0% = efeito desligado")
     }
 
@@ -212,8 +217,7 @@ final class StoryTextureTests: XCTestCase {
         XCTAssertEqual(t.clamped().lineAngle, 75)
         var o = textureOptions
         o.texturePreset = .custom
-        o.customTexture = t
-        o.customTexture.lines = true
+        o.customToneLines = StoryLineSettings(texture: t)
         let p = StoryParams.sample(o, seed: 3)
         XCTAssertLessThanOrEqual(p.lineThickness, p.lineSpacing - 2)
         XCTAssertGreaterThanOrEqual(p.lineThickness, 2)
@@ -233,9 +237,103 @@ final class StoryTextureTests: XCTestCase {
         var fresh = StoryOptions()
         fresh.selectTexturePreset(.custom)
         XCTAssertEqual(fresh.customTexture, .balanced, "vindo do Desligado, parte do Equilibrado")
+        XCTAssertEqual(fresh.customToneLines, StoryLineSettings.preset(.balanced, style: .tone))
+        XCTAssertEqual(fresh.customInkLines, StoryLineSettings.preset(.balanced, style: .ink))
         fresh.customTexture.bloomPercent = 55
         fresh.selectTexturePreset(.custom)
         XCTAssertEqual(fresh.customTexture.bloomPercent, 55, "escolher Personalizado de novo não apaga o que já estava")
+    }
+
+    // MARK: - Linhas escolhidas antes do nível (beta.26)
+
+    func testLinesAreChosenBeforeTheLevelAndEachStyleHasItsOwnLevels() {
+        XCTAssertFalse(StoryOptions().linesEnabled, "linhas desligadas de fábrica")
+        var o = textureOptions
+        for level in [StoryTexturePreset.subtle, .balanced, .intense] {
+            o.texturePreset = level
+            for style in StoryLineStyle.allCases {
+                o.lineStyle = style
+                o.lineDirection = .slash
+                let t = o.texture
+                let expected = StoryLineSettings.preset(level, style: style)
+                XCTAssertTrue(t.lines)
+                XCTAssertEqual(t.lineStyle, style, "\(level) \(style)")
+                XCTAssertEqual(t.lineDirection, .slash, "a direção escolhida vale em qualquer nível")
+                XCTAssertEqual(t.lineOpacityPercent, expected.opacityPercent, "\(level) \(style)")
+                XCTAssertEqual(t.lineSpacing, expected.spacing)
+                XCTAssertEqual(t.lineThickness, expected.thickness)
+                XCTAssertEqual(t.jitterPercent, StoryOptions.baseTexture(level).jitterPercent, "serrilhado segue o nível")
+                let p = StoryParams.sample(o, seed: 11)
+                XCTAssertEqual(p.lineStyle, style)
+                XCTAssertEqual(p.lineDirection, .slash)
+            }
+        }
+        // cada estilo tem níveis próprios e crescentes
+        for style in StoryLineStyle.allCases {
+            let s = StoryLineSettings.preset(.subtle, style: style), b = StoryLineSettings.preset(.balanced, style: style), i = StoryLineSettings.preset(.intense, style: style)
+            XCTAssertLessThan(s.opacityPercent, b.opacityPercent)
+            XCTAssertLessThan(b.opacityPercent, i.opacityPercent)
+        }
+        XCTAssertNotEqual(StoryLineSettings.preset(.balanced, style: .tone), StoryLineSettings.preset(.balanced, style: .ink))
+
+        // linhas desligadas: o nível continua valendo para os outros efeitos
+        o.linesEnabled = false
+        o.texturePreset = .intense
+        XCTAssertFalse(o.texture.lines)
+        XCTAssertEqual(StoryParams.sample(o, seed: 3).lineOpacity, 0)
+        XCTAssertGreaterThan(StoryParams.sample(o, seed: 3).jitterLevel, 0)
+
+        // ligar as linhas com o nível desligado já escolhe o Equilibrado
+        var fresh = StoryOptions()
+        fresh.setLinesEnabled(true)
+        XCTAssertEqual(fresh.texturePreset, .balanced)
+        fresh.texturePreset = .subtle
+        fresh.setLinesEnabled(false)
+        fresh.setLinesEnabled(true)
+        XCTAssertEqual(fresh.texturePreset, .subtle, "com um nível escolhido, ligar as linhas não troca o nível")
+    }
+
+    func testCustomLinesAreKeptSeparatelyForEachStyle() {
+        var o = textureOptions
+        o.texturePreset = .subtle
+        o.selectTexturePreset(.custom)
+        XCTAssertEqual(o.customToneLines, StoryLineSettings.preset(.subtle, style: .tone), "o Personalizado parte do nível em uso, nos dois estilos")
+        XCTAssertEqual(o.customInkLines, StoryLineSettings.preset(.subtle, style: .ink))
+        o.lineStyle = .tone
+        o.customLines.opacityPercent = 77
+        o.customLines.angle = 65
+        o.lineStyle = .ink
+        XCTAssertEqual(o.customLines, StoryLineSettings.preset(.subtle, style: .ink), "mexer no Tom não muda a Gravura")
+        o.customLines.blend = .overlay
+        XCTAssertEqual(o.texture.lineBlend, .overlay)
+        o.lineStyle = .tone
+        XCTAssertEqual(o.texture.lineOpacityPercent, 77)
+        XCTAssertEqual(o.texture.lineAngle, 65)
+        XCTAssertEqual(o.customInkLines.blend, .overlay)
+    }
+
+    func testOptionsSavedBeforeBeta26MoveTheirLinesOut() throws {
+        let custom = #"{"texturePreset":"custom","customTexture":{"lines":true,"lineStyle":"tone","lineDirection":"slash","lineOpacityPercent":42,"lineSpacing":11,"lineThickness":3,"lineAngle":62,"lineIrregularity":20}}"#.data(using: .utf8)!
+        let c = try JSONDecoder().decode(StoryOptions.self, from: custom)
+        XCTAssertTrue(c.linesEnabled)
+        XCTAssertEqual(c.lineStyle, .tone)
+        XCTAssertEqual(c.lineDirection, .slash)
+        XCTAssertEqual(c.customToneLines.opacityPercent, 42)
+        XCTAssertEqual(c.customToneLines.angle, 62)
+        XCTAssertEqual(c.texture.lineSpacing, 11)
+        let intense = #"{"texturePreset":"intense"}"#.data(using: .utf8)!
+        let i = try JSONDecoder().decode(StoryOptions.self, from: intense)
+        XCTAssertTrue(i.linesEnabled)
+        XCTAssertEqual(i.lineStyle, .ink, "o Intenso era gravura em X")
+        XCTAssertEqual(i.lineDirection, .cross)
+        let customOff = #"{"texturePreset":"custom","customTexture":{"lines":false}}"#.data(using: .utf8)!
+        XCTAssertFalse(try JSONDecoder().decode(StoryOptions.self, from: customOff).linesEnabled)
+        var n = StoryOptions()
+        n.linesEnabled = true
+        n.lineStyle = .ink
+        n.lineDirection = .backslash
+        n.customInkLines.blend = .overlay
+        XCTAssertEqual(try JSONDecoder().decode(StoryOptions.self, from: JSONEncoder().encode(n)), n)
     }
 
     func testOldSavedOptionsStillDecodeWithTexturesOff() throws {
@@ -259,6 +357,9 @@ final class StoryTextureTests: XCTestCase {
         XCTAssertEqual(p.texturePreset, .balanced)
         XCTAssertEqual(p.customTexture.lineSpacing, 9)
         XCTAssertEqual(p.customTexture.lineStyle, .ink, "opções salvas antes da beta.25 continuam em gravura")
+        XCTAssertTrue(p.linesEnabled, "salvo antes da beta.26 com um nível ligado: as linhas continuam ligadas")
+        XCTAssertEqual(p.lineStyle, .tone)
+        XCTAssertFalse(o.linesEnabled, "salvo com texturas desligadas: linhas desligadas")
         n.customTexture.lineStyle = .tone
         n.customTexture.lineAngle = 62
         n.customTexture.lineIrregularity = 35
@@ -553,10 +654,11 @@ final class StoryTextureTests: XCTestCase {
         var o = textureOptions
         o.texturePreset = .custom
         o.customTexture = .balanced
-        o.customTexture.lineStyle = .ink
         var inkOnly = o
-        inkOnly.customTexture.lineStyle = .ink
-        o.customTexture.lineStyle = .tone
+        inkOnly.lineStyle = .ink
+        // mesmo espaçamento nos dois estilos (a fase é sorteada dentro do espaçamento)
+        inkOnly.customInkLines.spacing = o.customToneLines.spacing
+        o.lineStyle = .tone
         var angles = Set<Int>()
         for seed in 1...40 as ClosedRange<UInt64> {
             let tone = StoryParams.sample(o, seed: seed), ink = StoryParams.sample(inkOnly, seed: seed)

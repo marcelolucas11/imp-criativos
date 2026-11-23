@@ -412,10 +412,10 @@ enum StoryTexturePreset: String, CaseIterable, Identifiable, Codable {
     var hint: String {
         switch self {
         case .off: return "Sem linhas, serrilhado, aberração nem bloom."
-        case .subtle: return "Linhas no tom da imagem (mantêm a cor), leves e irregulares, micro-aberração e serrilhado mínimo. O texto continua limpo."
-        case .balanced: return "Linhas no tom da imagem bem visíveis, serrilhado moderado e deslocamento RGB médio."
-        case .intense: return "Linhas em gravura preto e branco (X), serrilhado alto, aberração cromática e bloom fortes. Confira o texto no zoom antes de processar o lote."
-        case .custom: return "Uma chave e um slider (0 a 100%) para cada efeito."
+        case .subtle: return "Linhas leves, micro-aberração e serrilhado mínimo. O texto continua limpo."
+        case .balanced: return "Linhas bem visíveis, serrilhado moderado e deslocamento RGB médio."
+        case .intense: return "Linhas fortes, serrilhado alto, aberração cromática e bloom fortes. Confira o texto no zoom antes de processar o lote."
+        case .custom: return "Sliders das linhas (do estilo escolhido acima) e uma chave e um slider (0 a 100%) para cada efeito."
         }
     }
 }
@@ -587,6 +587,70 @@ struct StoryTexture: Codable, Equatable {
     }
 }
 
+/// 1.0.0-beta.26: medidas das linhas de um estilo. Cada estilo (Tom e Gravura) tem os próprios níveis Sutil, Equilibrado e
+/// Intenso e o próprio Personalizado; ligar as linhas, o estilo e a direção ficam fora do nível, escolhidos antes.
+struct StoryLineSettings: Codable, Equatable {
+    /// Intensidade (0–100%). No Tom vira variação de brilho (`toneAmplitude`); na Gravura, opacidade da faixa escura (`lineAlpha`).
+    var opacityPercent = 50.0
+    var spacing = 10.0
+    var thickness = 2.0
+    /// Só no Tom.
+    var angle = 55.0
+    var irregularity = 60.0
+    /// Só na Gravura.
+    var blend: StoryLineBlend = .hardLight
+
+    init() {}
+
+    init(opacityPercent: Double, spacing: Double, thickness: Double, angle: Double = 55, irregularity: Double = 0, blend: StoryLineBlend = .hardLight) {
+        self.opacityPercent = opacityPercent
+        self.spacing = spacing
+        self.thickness = thickness
+        self.angle = angle
+        self.irregularity = irregularity
+        self.blend = blend
+    }
+
+    /// As medidas de linha guardadas num `StoryTexture` (usado para migrar opções salvas antes da beta.26).
+    init(texture t: StoryTexture) {
+        self.init(opacityPercent: t.lineOpacityPercent, spacing: t.lineSpacing, thickness: t.lineThickness,
+                  angle: t.lineAngle, irregularity: t.lineIrregularity, blend: t.lineBlend)
+    }
+
+    func apply(to t: inout StoryTexture) {
+        t.lineOpacityPercent = opacityPercent
+        t.lineSpacing = spacing
+        t.lineThickness = thickness
+        t.lineAngle = angle
+        t.lineIrregularity = irregularity
+        t.lineBlend = blend
+    }
+
+    /// Níveis de cada estilo. Desligado e Personalizado não têm nível próprio (devolvem o Equilibrado).
+    static func preset(_ level: StoryTexturePreset, style: StoryLineStyle) -> StoryLineSettings {
+        switch (style, level) {
+        case (.tone, .subtle): return StoryLineSettings(opacityPercent: 30, spacing: 10, thickness: 2, angle: 55, irregularity: 60)
+        case (.tone, .intense): return StoryLineSettings(opacityPercent: 90, spacing: 8, thickness: 3, angle: 55, irregularity: 40)
+        case (.tone, _): return StoryLineSettings(opacityPercent: 60, spacing: 9, thickness: 3, angle: 55, irregularity: 50)
+        case (.ink, .subtle): return StoryLineSettings(opacityPercent: 20, spacing: 12, thickness: 2, blend: .hardLight)
+        case (.ink, .intense): return StoryLineSettings(opacityPercent: 85, spacing: 8, thickness: 4, blend: .hardLight)
+        case (.ink, _): return StoryLineSettings(opacityPercent: 50, spacing: 8, thickness: 3, blend: .hardLight)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func v<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
+        opacityPercent = v(.opacityPercent, opacityPercent)
+        spacing = v(.spacing, spacing)
+        thickness = v(.thickness, thickness)
+        angle = v(.angle, angle)
+        irregularity = v(.irregularity, irregularity)
+        blend = v(.blend, blend)
+    }
+}
+
 /// Tudo o que a tela do Otimizador escolhe. Fica salvo entre aberturas do app.
 struct StoryOptions: Codable, Equatable {
     var fit: StoryFit = .blurFit
@@ -605,7 +669,15 @@ struct StoryOptions: Codable, Equatable {
     /// 1.0.0-beta.23: texturas, linhas e bordas (desligado de fábrica: quem já usa o app não vê mudança).
     var texturePreset: StoryTexturePreset = .off
     /// Valores do modo Personalizado das texturas (começa na cópia do preset que estava em uso).
+    /// beta.26: daqui só valem serrilhado, aberração e ofuscação; as linhas vêm dos campos abaixo.
     var customTexture: StoryTexture = .balanced
+    /// 1.0.0-beta.26: as linhas são escolhidas antes do nível: liga/desliga, estilo e direção valem para qualquer nível.
+    var linesEnabled = false
+    var lineStyle: StoryLineStyle = .tone
+    var lineDirection: StoryLineDirection = .random
+    /// Personalizado das linhas, um para cada estilo (trocar o estilo não mistura as medidas de um com o outro).
+    var customToneLines = StoryLineSettings.preset(.balanced, style: .tone)
+    var customInkLines = StoryLineSettings.preset(.balanced, style: .ink)
 
     static let versionsRange: ClosedRange<Int> = 1...10
 
@@ -624,24 +696,57 @@ struct StoryOptions: Codable, Equatable {
         }
     }
 
-    /// Efeitos de textura em vigor, conforme o preset escolhido.
-    var texture: StoryTexture {
-        switch texturePreset {
+    /// Serrilhado, aberração e ofuscação do nível escolhido (sem as linhas).
+    static func baseTexture(_ preset: StoryTexturePreset) -> StoryTexture {
+        switch preset {
         case .off: return .none
         case .subtle: return .subtle
         case .balanced: return .balanced
         case .intense: return .intense
-        case .custom: return customTexture.clamped()
+        case .custom: return .balanced
         }
     }
 
-    /// Troca o preset de texturas. Ao entrar no Personalizado, os sliders partem do que estava valendo
-    /// (se estava desligado, parte do Equilibrado) em vez de pular para valores soltos.
+    /// Medidas das linhas em vigor: o nível do estilo escolhido, ou o Personalizado desse estilo.
+    var lineSettings: StoryLineSettings {
+        texturePreset == .custom ? customLines : StoryLineSettings.preset(texturePreset, style: lineStyle)
+    }
+
+    /// Personalizado das linhas do estilo escolhido (é o que os sliders editam).
+    var customLines: StoryLineSettings {
+        get { lineStyle == .tone ? customToneLines : customInkLines }
+        set {
+            if lineStyle == .tone { customToneLines = newValue } else { customInkLines = newValue }
+        }
+    }
+
+    /// Efeitos de textura em vigor: o nível escolhido mais as linhas (ligadas, estilo e direção escolhidos antes do nível).
+    var texture: StoryTexture {
+        if texturePreset == .off { return .none }
+        var t = texturePreset == .custom ? customTexture : Self.baseTexture(texturePreset)
+        t.lines = linesEnabled
+        t.lineStyle = lineStyle
+        t.lineDirection = lineDirection
+        lineSettings.apply(to: &t)
+        return t.clamped()
+    }
+
+    /// Troca o nível das texturas. Ao entrar no Personalizado, os sliders (das linhas dos dois estilos e dos outros efeitos)
+    /// partem do nível que estava valendo (se estava desligado, do Equilibrado) em vez de pular para valores soltos.
     mutating func selectTexturePreset(_ preset: StoryTexturePreset) {
         if preset == .custom, texturePreset != .custom {
-            customTexture = texturePreset == .off ? .balanced : texture
+            let from: StoryTexturePreset = texturePreset == .off ? .balanced : texturePreset
+            customTexture = Self.baseTexture(from)
+            customToneLines = StoryLineSettings.preset(from, style: .tone)
+            customInkLines = StoryLineSettings.preset(from, style: .ink)
         }
         texturePreset = preset
+    }
+
+    /// Liga ou desliga as linhas. Ligar com o nível em Desligado já escolhe o Equilibrado (senão não apareceria nada).
+    mutating func setLinesEnabled(_ on: Bool) {
+        linesEnabled = on
+        if on, texturePreset == .off { texturePreset = .balanced }
     }
 
     // Leitura tolerante: campos novos em versões futuras não apagam o que já estava salvo.
@@ -660,6 +765,32 @@ struct StoryOptions: Codable, Equatable {
         versionsPerImage = (try? c.decodeIfPresent(Int.self, forKey: .versionsPerImage)) ?? d.versionsPerImage
         texturePreset = (try? c.decodeIfPresent(StoryTexturePreset.self, forKey: .texturePreset)) ?? d.texturePreset
         customTexture = (try? c.decodeIfPresent(StoryTexture.self, forKey: .customTexture)) ?? d.customTexture
+        customToneLines = (try? c.decodeIfPresent(StoryLineSettings.self, forKey: .customToneLines)) ?? d.customToneLines
+        customInkLines = (try? c.decodeIfPresent(StoryLineSettings.self, forKey: .customInkLines)) ?? d.customInkLines
+        if let on = try? c.decodeIfPresent(Bool.self, forKey: .linesEnabled) {
+            linesEnabled = on
+            lineStyle = (try? c.decodeIfPresent(StoryLineStyle.self, forKey: .lineStyle)) ?? d.lineStyle
+            lineDirection = (try? c.decodeIfPresent(StoryLineDirection.self, forKey: .lineDirection)) ?? d.lineDirection
+        } else {
+            // salvo antes da beta.26: as linhas moravam dentro do nível
+            switch texturePreset {
+            case .off:
+                break
+            case .custom:
+                linesEnabled = customTexture.lines
+                lineStyle = customTexture.lineStyle
+                lineDirection = customTexture.lineDirection
+                customLines = StoryLineSettings(texture: customTexture)
+            case .intense:
+                linesEnabled = true
+                lineStyle = .ink
+                lineDirection = .cross
+            case .subtle, .balanced:
+                linesEnabled = true
+                lineStyle = .tone
+                lineDirection = .random
+            }
+        }
     }
 }
 

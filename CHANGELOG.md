@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## [1.0.0-beta.26] — 2026-11-23
+
+**Otimizador em Lote: as linhas são escolhidas antes do nível**
+
+A ordem da tela agora segue o fluxo de trabalho: enquadramento → variações sutis → **linhas diagonais** → **intensidade das texturas** → saída.
+
+- **Nova seção "Linhas diagonais"**, antes do nível. Tem a chave sim/não, o **estilo** (Tom ou Gravura) e a **direção** (botões Esquerda \\, Direita /, Cruzada X, Aleatória). Essas escolhas valem em qualquer nível, inclusive no Personalizado.
+- **"Intensidade das texturas"** (antes "Texturas, linhas e bordas"): o nível Sutil, Equilibrado, Intenso ou Personalizado define a força e as medidas das linhas **do estilo escolhido**, e também o serrilhado, a aberração e a ofuscação.
+  - Tom: Sutil 30% · 10/2 px · 55° · irregularidade 60% — Equilibrado 60% · 9/3 px · 50% — Intenso 90% · 8/3 px · 40%.
+  - Gravura: Sutil 20% · 12/2 px — Equilibrado 50% · 8/3 px — Intenso 85% · 8/4 px (hard-light).
+  - O Intenso não força mais o X: vale a direção escolhida.
+- **Personalizado separado por estilo:** os sliders das linhas do Tom e da Gravura ficam guardados separadamente, então trocar o estilo não mistura as medidas.
+- Ligar as linhas com o nível em Desligado já escolhe o Equilibrado. Com as linhas desligadas, o nível continua valendo para os outros efeitos.
+- **Opções salvas antes desta versão:** quem usava um nível continua com linhas ligadas (Sutil e Equilibrado no Tom; Intenso em Gravura X). O Personalizado leva as linhas, o estilo e a direção que já tinha.
+- **Testes novos:** níveis próprios de cada estilo, direção e estilo valendo em todos os níveis, Personalizado separado por estilo, ligar as linhas sem nível e leitura das opções antigas.
+
 ## [1.0.0-beta.25] — 2026-11-23
 
 **Otimizador em Lote: linhas no tom (mantêm a cor)**

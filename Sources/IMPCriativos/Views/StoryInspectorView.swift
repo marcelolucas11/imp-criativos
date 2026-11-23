@@ -126,7 +126,7 @@ struct StoryInspectorView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if batch.options.texturePreset == .off {
-                Text("As texturas estão desligadas. Escolha Sutil, Equilibrado, Intenso ou Personalizado em \"Texturas, linhas e bordas\" para ver linhas, serrilhado, aberração e bloom aqui.")
+                Text("As texturas estão desligadas. Escolha Sutil, Equilibrado, Intenso ou Personalizado em \"Intensidade das texturas\" para ver linhas, serrilhado, aberração e bloom aqui.")
                     .font(.caption).foregroundStyle(Brand.warning)
             }
             if !batch.previewSummary.isEmpty {

@@ -143,8 +143,33 @@ struct StoryOptimizerView: View {
                 }
             }
 
-            Section("Texturas, linhas e bordas") {
-                Picker("Preset", selection: texturePresetBinding) {
+            Section("Linhas diagonais") {
+                Toggle("Linhas diagonais", isOn: linesEnabledBinding)
+                if batch.options.linesEnabled {
+                    Picker("Estilo", selection: $batch.options.lineStyle) {
+                        ForEach(StoryLineStyle.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text(batch.options.lineStyle.hint)
+                        .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Direção")
+                        LineDirectionPicker(selection: $batch.options.lineDirection)
+                    }
+                    Text("A força e as medidas das linhas vêm do nível escolhido em \"Intensidade das texturas\", logo abaixo. Cada estilo tem os próprios níveis Sutil, Equilibrado e Intenso.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if batch.options.texturePreset == .off {
+                        Text("O nível está em Desligado: escolha Sutil, Equilibrado, Intenso ou Personalizado abaixo para as linhas aparecerem.")
+                            .font(.caption).foregroundStyle(Brand.warning)
+                    }
+                } else {
+                    Text("Desligado: nenhuma linha. O nível abaixo continua valendo para serrilhado, aberração e ofuscação.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Intensidade das texturas") {
+                Picker("Nível", selection: texturePresetBinding) {
                     ForEach(StoryTexturePreset.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -262,6 +287,13 @@ struct StoryOptimizerView: View {
             .disabled(batch.options.format != .jpg)
     }
 
+    private var linesEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { batch.options.linesEnabled },
+            set: { batch.options.setLinesEnabled($0) }
+        )
+    }
+
     private var texturePresetBinding: Binding<StoryTexturePreset> {
         Binding(
             get: { batch.options.texturePreset },
@@ -271,28 +303,18 @@ struct StoryOptimizerView: View {
 
     @ViewBuilder
     private var textureControls: some View {
-        Toggle("Linhas diagonais", isOn: $batch.options.customTexture.lines)
-        if batch.options.customTexture.lines {
-            Picker("Estilo", selection: $batch.options.customTexture.lineStyle) {
-                ForEach(StoryLineStyle.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Text(batch.options.customTexture.lineStyle.hint)
-                .font(.caption).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Direção")
-                LineDirectionPicker(selection: $batch.options.customTexture.lineDirection)
-            }
-            slider("Intensidade", $batch.options.customTexture.lineOpacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
-            slider("Espaçamento", $batch.options.customTexture.lineSpacing, StoryTexture.spacingRange, step: 1, format: "%.0f px")
-            slider("Espessura", $batch.options.customTexture.lineThickness, StoryTexture.thicknessRange, step: 1, format: "%.0f px")
-            if batch.options.customTexture.lineStyle == .tone {
-                slider("Ângulo", $batch.options.customTexture.lineAngle, StoryTexture.angleRange, step: 1, format: "%.0f°")
-                slider("Irregularidade", $batch.options.customTexture.lineIrregularity, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+        if batch.options.linesEnabled {
+            Text("Linhas — \(batch.options.lineStyle.label)").font(.subheadline.weight(.semibold))
+            slider("Intensidade das linhas", $batch.options.customLines.opacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+            slider("Espaçamento", $batch.options.customLines.spacing, StoryTexture.spacingRange, step: 1, format: "%.0f px")
+            slider("Espessura", $batch.options.customLines.thickness, StoryTexture.thicknessRange, step: 1, format: "%.0f px")
+            if batch.options.lineStyle == .tone {
+                slider("Ângulo", $batch.options.customLines.angle, StoryTexture.angleRange, step: 1, format: "%.0f°")
+                slider("Irregularidade", $batch.options.customLines.irregularity, StoryTexture.percentRange, step: 1, format: "%.0f%%")
                 Text("Medidas em pixels da saída 1080×1920. Espaçamento é a distância de uma linha à próxima, e a espessura é o miolo escuro (a borda é suave). Ângulo a partir da horizontal: 45° é a diagonal exata, mais alto deixa as linhas mais em pé (cada imagem sorteia ±3°). Irregularidade: 0% são linhas contínuas e iguais; quanto mais alto, mais elas variam de força, têm falhas e saem um pouco do lugar. Intensidade: 10–25% quase imperceptível, 50% visível (±20% de brilho), 100% forte (±35%).")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                Picker("Mistura", selection: $batch.options.customTexture.lineBlend) {
+                Picker("Mistura", selection: $batch.options.customLines.blend) {
                     ForEach(StoryLineBlend.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -304,6 +326,7 @@ struct StoryOptimizerView: View {
                 Text("Medidas em pixels da saída 1080×1920, na horizontal, sempre a 45° e pixel exato. A espessura nunca passa do espaçamento menos 2 px. Intensidade: 10–25% sutil, 50% bem marcado, 80–100% forte.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Divider()
         }
         Toggle("Serrilhado das bordas (quebra o anti-aliasing)", isOn: $batch.options.customTexture.jitter)
         if batch.options.customTexture.jitter {
@@ -329,7 +352,9 @@ struct StoryOptimizerView: View {
     /// Resumo das texturas do preset em uma linha.
     static func describe(_ t: StoryTexture) -> String {
         var parts: [String] = []
-        if t.lines {
+        if !t.lines {
+            parts.append("sem linhas")
+        } else {
             switch t.lineStyle {
             case .tone:
                 parts.append("linhas no tom (mantêm a cor) \(t.lineDirection.label.lowercased()), \(Int(t.lineOpacityPercent))%, \(Int(t.lineAngle))°, espaçamento \(Int(t.lineSpacing)) px, espessura \(Int(t.lineThickness)) px, irregularidade \(Int(t.lineIrregularity))%")

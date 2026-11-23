@@ -246,7 +246,7 @@ final class StoryBatch: ObservableObject {
         let cap = Self.concurrency
         let started = Date()
         AppLog.info(.exportacao, "Otimizador em Lote: \(total) imagem(ns) × \(versions) versão(ões) → \(dest.lastPathComponent)",
-                    details: "Enquadramento: \(opts.fit.label) · Intensidade: \(opts.intensity.label) · Texturas: \(opts.texturePreset.label) · Formato: \(opts.format.label)\(opts.mirror ? " · espelhado" : "")")
+                    details: "Enquadramento: \(opts.fit.label) · Intensidade: \(opts.intensity.label) · Linhas: \(opts.linesEnabled ? "\(opts.lineStyle.label), \(opts.lineDirection.label.lowercased())" : "não") · Texturas: \(opts.texturePreset.label) · Formato: \(opts.format.label)\(opts.mirror ? " · espelhado" : "")")
 
         runTask = Task { [weak self] in
             await BoundedParallel.run(jobs, limit: { cap }, work: { job -> Void? in
