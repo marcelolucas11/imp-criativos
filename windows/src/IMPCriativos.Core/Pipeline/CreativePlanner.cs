@@ -189,7 +189,7 @@ public static class ForbiddenTerms
             var pattern = @"(?<![\p{L}\p{N}])" + Regex.Escape(term.Trimmed()) + @"(?![\p{L}\p{N}])";
             try { o = Regex.Replace(o, pattern, "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant); } catch { }
         }
-        var lines = Regex.Split(o, "\r\n|\n|\r| | |\u0085").Select(line =>
+        var lines = Regex.Split(o, @"\r\n|\n|\r|\u2028|\u2029|\u0085").Select(line =>
         {
             var l = Regex.Replace(line, @"\s{2,}", " ");
             l = Regex.Replace(l, @"\s+([?!.,:;])", "$1");
