@@ -42,6 +42,27 @@ jobs:
             -derivedDataPath build-tests ARCHS=arm64 CODE_SIGN_IDENTITY="-" test 2>&1 | tee test.log | grep -E "Test Case|Executed|error:|failed|ruído|granulação|riscos|temperatura|zoom agressivo|Otimizador:|SAMPLEB64" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" test.log
 
+      # 1.0.0-beta.27: paridade Mac → Windows. O código Swift gera os prompts e sorteios do Otimizador;
+      # a versão Windows (ParidadeMacTests) precisa dar exatamente o mesmo resultado.
+      - name: Paridade Mac → Windows (prompts e sorteios)
+        run: |
+          scripts/paridade/gerar.sh /tmp/paridade-mac.json
+          FIX=windows/tests/IMPCriativos.Tests/fixtures/paridade-mac.json
+          if [ -f "$FIX" ]; then
+            diff -u "$FIX" /tmp/paridade-mac.json || { echo "::error::Prompts ou sorteios do Mac mudaram: rode scripts/paridade/gerar.sh e atualize a versão Windows no mesmo PR."; exit 1; }
+          else
+            echo "::warning::$FIX ainda não existe (baixe o artefato paridade-mac e coloque no repositório)."
+          fi
+
+      - name: Guardar paridade
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paridade-mac
+          path: /tmp/paridade-mac.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Velocidade das texturas (Release, swiftc -O)
         run: |
           mkdir -p /tmp/bench
@@ -104,3 +125,88 @@ jobs:
             test.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # 1.0.0-beta.27: versão Windows. Os testes do Core rodam também no Linux (mais rápido).
+  windows-core-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Eixos gerados em dia (Mac e Windows)
+        run: |
+          python3 scripts/eixos_variacao.py .
+          git diff --exit-code -- Sources/IMPCriativos/Models/DefaultAxes.swift docs/EIXOS-DE-VARIACAO.md windows/src/IMPCriativos.Core/Models/DefaultAxes.cs
+
+      - name: Cache da libjpeg-turbo (Linux)
+        uses: actions/cache@v4
+        with:
+          path: windows/vendor/libjpeg-turbo
+          key: ljt-win-${{ runner.os }}-${{ hashFiles('scripts/build_libjpeg_turbo.sh', 'scripts/build_libjpeg_turbo_windows.ps1') }}
+
+      - name: Compilar libjpeg-turbo (Linux, para os testes)
+        shell: pwsh
+        run: scripts/build_libjpeg_turbo_windows.ps1
+
+      - name: Testes do Core
+        env:
+          IMP_TURBOJPEG_DIR: ${{ github.workspace }}/windows/vendor/libjpeg-turbo/linux-x64
+          IMP_PARIDADE_OUT: ${{ github.workspace }}/windows/artifacts
+          IMP_STORY_SAMPLES: ${{ github.workspace }}/windows/artifacts/amostras
+        run: dotnet test windows/tests/IMPCriativos.Tests/IMPCriativos.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      - name: Saídas dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-core-linux
+          path: windows/artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache da libjpeg-turbo (Windows)
+        uses: actions/cache@v4
+        with:
+          path: windows/vendor/libjpeg-turbo
+          key: ljt-win-${{ runner.os }}-${{ hashFiles('scripts/build_libjpeg_turbo.sh', 'scripts/build_libjpeg_turbo_windows.ps1') }}
+
+      - name: Compilar libjpeg-turbo (turbojpeg.dll)
+        shell: pwsh
+        run: scripts/build_libjpeg_turbo_windows.ps1
+
+      - name: Compilar a solução
+        run: dotnet build windows/IMPCriativos.Windows.sln -c Release
+
+      - name: Testes
+        env:
+          IMP_TURBOJPEG_DIR: ${{ github.workspace }}\windows\vendor\libjpeg-turbo\win-x64
+        run: dotnet test windows/tests/IMPCriativos.Tests/IMPCriativos.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Publicar o app (self-contained)
+        shell: pwsh
+        run: windows/build/publish.ps1
+
+      - name: Teste de fumaça (todas as telas, Otimizador, capturas)
+        shell: pwsh
+        run: windows/build/smoke.ps1
+
+      - name: Capturas das telas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-windows
+          path: windows/artifacts/smoke
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,27 @@
+{
+  "axes" : [
+    {
+      "id" : "6D2C1F0A-3B44-4E8D-9A52-0F1E2D3C4B5A",
+      "instruction" : "Complete redesign in a premium 3D render style: glossy 3D geometric shapes (spheres, rings, pills) floating around the main subject, studio lighting with soft reflections, smooth gradient backdrop in a new palette. Text clean, bold and flat for perfect legibility.",
+      "name" : "3D premium"
+    },
+    {
+      "id" : "A1B2C3D4-E5F6-4711-8899-AABBCCDDEEFF",
+      "instruction" : "Make it look like a comic book cover.",
+      "name" : "Meu eixo"
+    }
+  ],
+  "axisRotation" : false,
+  "createdAt" : "2026-11-20T14:03:09Z",
+  "defaultVariations" : 4,
+  "extraInstructions" : "Remover o nome \"Minha Bet\" e o @minhabet.",
+  "id" : "0F4E8B1C-2D3A-4B5C-8D9E-112233445566",
+  "name" : "Cliente Ação",
+  "removeItems" : [
+    "Logotipo da empresa",
+    "Telefone ou WhatsApp"
+  ],
+  "savedInstructions" : [
+    "trocar R$ 10 por R$ 5"
+  ]
+}

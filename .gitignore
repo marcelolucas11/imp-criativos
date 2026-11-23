@@ -20,3 +20,9 @@ dmg/
 # libjpeg-turbo compilada por scripts/build_libjpeg_turbo.sh (1.0.0-beta.21)
 Vendor/libjpeg-turbo/
 Vendor/CTurboJPEG/turbojpeg.h
+
+# 1.0.0-beta.27: versão Windows (compilação e libjpeg-turbo gerada por scripts/build_libjpeg_turbo_windows.ps1)
+windows/vendor/
+windows/**/bin/
+windows/**/obj/
+windows/artifacts/
