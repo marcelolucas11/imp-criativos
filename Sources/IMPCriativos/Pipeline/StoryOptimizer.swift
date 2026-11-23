@@ -136,9 +136,11 @@ enum StoryOptimizer {
             let m = CGFloat(min(params.perspectiveMax, 0.05))
             let big = centered(lanczos(out, 1 + 2 * m), in: frame)
             let ex = m * W, ey = m * H
-            let c = params.perspective.map { CGFloat(max(-Double(m), min(Double(m), $0))) }
-            let f = CIFilter.perspectiveTransform()
-            f.inputImage = big
+            // 90% da folga + bordas replicadas: o quadro final nunca pega a borda da imagem ampliada
+            let c = params.perspective.map { CGFloat(max(-Double(m), min(Double(m), $0)) * 0.9) }
+            let f = CIFilter.perspectiveTransformWithExtent()
+            f.inputImage = big.clampedToExtent()
+            f.extent = big.extent
             f.bottomLeft = CGPoint(x: -ex + c[0] * W, y: -ey + c[1] * H)
             f.bottomRight = CGPoint(x: W + ex + c[2] * W, y: -ey + c[3] * H)
             f.topRight = CGPoint(x: W + ex + c[4] * W, y: H + ey + c[5] * H)

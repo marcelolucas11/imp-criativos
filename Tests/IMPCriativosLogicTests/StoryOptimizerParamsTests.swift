@@ -215,11 +215,18 @@ final class StoryOptimizerParamsTests: XCTestCase {
         o.custom.rotationMaxDegrees = 5
         o.custom.noiseMaxAmplitude = 50
         o.custom.grainMaxOpacityPercent = .nan
+        o.custom.diagonalMaxAmplitude = 99
+        o.custom.chromaticMaxPixels = 7
+        o.custom.noiseMinAmplitude = 6
+        o.custom.noiseMaxAmplitude = 3
         let a = o.adjustments
-        XCTAssertEqual(a.cropMaxPercent, 1.5)
-        XCTAssertEqual(a.rotationMaxDegrees, 0.8)
-        XCTAssertEqual(a.noiseMaxAmplitude, 4)
+        XCTAssertEqual(a.cropMaxPercent, 5, "até o limite do Agressivo")
+        XCTAssertEqual(a.rotationMaxDegrees, 3)
+        XCTAssertEqual(a.noiseMaxAmplitude, 3)
+        XCTAssertEqual(a.noiseMinAmplitude, 3, "mínimo nunca passa do máximo")
         XCTAssertEqual(a.grainMaxOpacityPercent, 1)
+        XCTAssertEqual(a.diagonalMaxAmplitude, 12)
+        XCTAssertEqual(a.chromaticMaxPixels, 2)
     }
 
     func testRotationZoomCoversCorners() {
