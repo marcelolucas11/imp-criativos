@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using IMPCriativos.Core.Pipeline;
+using IMPCriativos.Core.Providers;
 using IMPCriativos.Core.Util;
 
 namespace IMPCriativos.Core.Models;
