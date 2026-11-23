@@ -1,5 +1,27 @@
 # Histórico de versões
 
+## [1.0.0-beta.21] — 2026-11-23
+
+**Nova aba: Otimizador em Lote (Stories 9:16) — 100% no Mac, sem IA**
+
+- **Nova aba "Otimizador em Lote (Stories 9:16)"** no menu lateral (também no Início, na barra de menus e em ⇧⌘O). Não usa internet, chave de API nem IA, e não tem custo.
+- **Até 100 imagens por vez:** arraste arquivos ou uma pasta (JPG, PNG, WebP, HEIC) ou use "Adicionar…". Contador 0/100, miniaturas com status, remover uma a uma ou limpar tudo.
+- **Enquadramento 9:16 em 1080×1920 exatos:** *Preencher* (corta o excesso pelo centro), *Fundo desfocado* (imagem inteira no centro, com uma cópia ampliada e desfocada dela em cima e embaixo; padrão de fábrica, para não cortar texto) ou *Cor sólida* (preto, cor dominante da imagem ou uma cor escolhida).
+- **Metadados apagados:** cada imagem é redesenhada do zero. EXIF, IPTC, XMP, GPS, comentários de software e perfis de cor antigos não passam para o arquivo, que sai só com um perfil sRGB limpo (para as cores não mudarem).
+- **Variações sutis sorteadas por imagem**, em três níveis: *Leve (imperceptível)*, *Moderado* (os intervalos completos) ou *Personalizado* (uma chave e um limite por etapa):
+  - micro-recorte de 0,5% a 1,5% nas bordas e micro-rotação até ±0,8°, voltando a 1080×1920 com Lanczos;
+  - brilho e contraste ±2%, saturação ±3%;
+  - micro-ruído de ±2 a ±4 níveis nos canais (evita faixas de cor na compressão do Instagram);
+  - deslocamento de 1px no canal vermelho ou azul;
+  - granulação de filme de 1% a 3% (overlay ou soft-light);
+  - Unsharp Mask leve (0,2 a 0,4) ou suavização de 0,2px;
+  - espelhar na horizontal (desligado de fábrica, só para imagens sem texto).
+- **Gravação:** JPEG pela **libjpeg-turbo**, com qualidade sorteada entre 88 e 93 e, quando ligado, baseline ou progressivo e subamostragem 4:2:0 ou 4:4:4 sorteados. Também dá para gravar em PNG, sem perda. Nomes `story_001_a8f3k.jpg` ou só sequenciais, com prefixo editável.
+- **Antes / Depois em tempo real** da imagem selecionada. O "Depois" é exatamente o arquivo que vai sair, e "Novo sorteio" troca os valores daquela imagem.
+- **Fila com 4 imagens por vez**, barra "X de Y imagens processadas", status por arquivo e **Cancelar**. Dá para trocar de aba enquanto roda. Os arquivos vão para uma pasta `stories_data_hora` dentro da pasta escolhida, com **Abrir pasta** e **Baixar Tudo (.ZIP)**. O resumo de cada execução fica no Histórico.
+- Cerca de 0,4 s por imagem de 4000×3000 no Mac de testes do GitHub.
+- **Testes automáticos** do sorteio (limites, presets, sementes, nomes) e do motor com imagens fabricadas: ruído dentro de ±N, canal deslocado exatamente 1px, cantos sem vazio depois da rotação, EXIF/GPS/XMP removidos, JPEG com o modo e a subamostragem sorteados, PNG sem blocos extras e mesma semente = mesmo arquivo.
+
 ## [1.0.0-beta.20] — 2026-11-11
 
 **Módulo "Limpar logo" e opção de desligar a limpeza no lote**

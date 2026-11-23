@@ -40,6 +40,18 @@ Não é um app de uso geral nem para rifas ou sorteios.
 
 Exemplo: 50 criativos × 4 variações = **50 limpos + 200 variações**.
 
+### Otimizador em Lote (Stories 9:16) — sem IA
+
+Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O). Roda **100% no Mac**: sem internet, sem chave de API e sem custo.
+
+- Arraste até **100 imagens** (JPG, PNG, WebP, HEIC) ou uma pasta; miniaturas com status, remover item ou limpar tudo.
+- **Enquadramento 9:16 (1080×1920):** Preencher (corta o excesso), Fundo desfocado (imagem inteira + cópia desfocada em cima e embaixo) ou Cor sólida (preto, cor dominante ou cor escolhida).
+- **Limpeza de metadados:** cada imagem é redesenhada do zero; EXIF, IPTC, XMP, GPS, comentários e perfis antigos não passam. O arquivo sai só com perfil sRGB.
+- **Variações sutis sorteadas por imagem** (Leve, Moderado ou Personalizado): micro-recorte 0,5–1,5% e rotação até ±0,8°, brilho/contraste ±2%, saturação ±3%, micro-ruído ±2 a ±4 níveis, deslocamento de 1px no canal R ou B, granulação de filme 1–3% (overlay/soft-light), Unsharp Mask leve ou suavização de 0,2px, espelhar (desligado de fábrica; só para imagens sem texto).
+- **Gravação:** JPEG pela libjpeg-turbo com qualidade 88–93, baseline ou progressivo e subamostragem 4:2:0 ou 4:4:4 sorteados; ou PNG. Nomes `story_001_a8f3k.jpg` (ou só sequenciais).
+- **Antes / Depois** da imagem selecionada com as configurações atuais (é exatamente o arquivo que vai sair) e "Novo sorteio".
+- **Fila** com 4 imagens por vez, barra "X de Y", status por arquivo e Cancelar. Salva numa pasta `stories_data_hora` dentro da pasta escolhida e oferece **Baixar Tudo (.ZIP)**.
+
 ## Instalar
 
 1. Clique em **Baixar para Mac** acima (ou baixe o `.dmg` de qualquer versão em [Releases](../../releases)).
@@ -68,11 +80,16 @@ O app baixa a versão nova daqui do GitHub, confere a integridade e se substitui
 Arquitetura: [docs/ARQUITETURA.md](docs/ARQUITETURA.md) · Histórico: [CHANGELOG.md](CHANGELOG.md)
 
 ```bash
-brew install xcodegen
+brew install xcodegen cmake
+scripts/build_libjpeg_turbo.sh   # libjpeg-turbo estática para o Otimizador em Lote (só na primeira vez)
 xcodegen generate
 open IMPCriativos.xcodeproj
 ```
 
 Publicar versão: escreva a seção no `CHANGELOG.md`, troque o número no arquivo `VERSION` (ex.: `1.0.0-beta.2`) e envie para a `main`. O GitHub Actions compila, cria a tag e publica a Release.
+
+### Créditos
+
+O Otimizador em Lote usa a [libjpeg-turbo](https://libjpeg-turbo.org) (licenças BSD e IJG). *This software is based in part on the work of the Independent JPEG Group.*
 
 © 2026 Impera Services

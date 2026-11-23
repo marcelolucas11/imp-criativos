@@ -35,6 +35,39 @@ Pasta de criativos
   sem custo). A análise continua, mas **não** limpa sozinha: marca encontrada vira só alerta na revisão.
   "Refazer" na limpeza de uma imagem (`forceClean`) limpa de verdade aquela imagem. Chaves exigidas: variações e análise.
 
+## Otimizador em Lote (Stories 9:16) — beta.21
+
+Aba independente dos lotes de IA (`SidebarItem.storyOptimizer` → `StoryOptimizerView`). Não cria `Job`, não usa provedor de IA,
+não entra na lista de lotes nem na estimativa de custo; o resumo de cada execução vai para o Histórico (categoria Exportação).
+
+| Arquivo | Papel |
+|---|---|
+| `Pipeline/StoryOptimizerParams.swift` | Só Foundation (entra nos testes). `StoryOptions` (salvo em UserDefaults `storyOptimizer.options`), presets Leve/Moderado, `StoryAdjustments` com os limites do pedido, `StoryParams.sample(options, seed)` (SplitMix64: mesma semente → mesmos parâmetros), nomes `story_001_a8f3k`, cor dominante |
+| `Pipeline/StoryOptimizer.swift` | Motor: Core Image (`CIContext` único, espaço de trabalho sRGB com gama) + libjpeg-turbo (`import CTurboJPEG`) |
+| `Pipeline/StoryBatch.swift` | Estado único do app (`StoryBatch.shared`): lista (máx. 100), fila com `BoundedParallel` (4 por vez, Cancelar), preview, ZIP via `/usr/bin/ditto` |
+| `Views/StoryOptimizerView.swift` | Tela: arrastar e soltar, miniaturas, controles, antes/depois, progresso |
+
+Ordem por imagem: leitura com orientação EXIF aplicada (maior lado até 4096 px) → espelho → enquadramento (Lanczos; fundo
+desfocado = cópia 1,08× com `CIGaussianBlur` σ36 e −6% de brilho) → micro-recorte/rotação (zoom mínimo para não sobrar canto
++ deslize dentro da folga do recorte) → `CIColorControls` → `CIUnsharpMask` ou blur 0,2px → deslocamento de canal (3 imagens de
+um canal, uma andando 1px inteiro, juntas com `CIMaximumCompositing`) → granulação (`CIRandomGenerator` monocromático,
+overlay/soft-light, `CIDissolveTransition` na opacidade) → ruído (`CILinearLightBlendMode` com camada 0,5 ± k: base ± N/255)
+→ buffer RGBX novo → JPEG (`tj3Set` qualidade, `TJPARAM_SUBSAMP`, `TJPARAM_PROGRESSIVE`, `tj3SetICCProfile` sRGB) ou PNG
+(ImageIO + `cleanPNG`, que deixa só blocos de imagem e cor).
+
+Cada imagem recebe a semente ao entrar na lista: o preview e o arquivo final saem da mesma semente; "Novo sorteio" troca a semente.
+Os sorteios são feitos sempre na mesma ordem e só depois zerados pelas etapas desligadas, então desligar uma etapa não muda as outras.
+
+**libjpeg-turbo:** `scripts/build_libjpeg_turbo.sh` baixa a versão fixa (SHA-256 conferido), compila estática para arm64/macOS 14
+e grava `Vendor/libjpeg-turbo/lib/libturbojpeg.a` + `Vendor/CTurboJPEG/turbojpeg.h` (fora do Git). `Vendor/CTurboJPEG/module.modulemap`
+expõe o módulo; `SWIFT_INCLUDE_PATHS`/`LIBRARY_SEARCH_PATHS` no `project.yml`. `tj3Init` é macro em C: o código chama `tj3InitVersion`.
+O CI e o release rodam o script antes do XcodeGen (com cache).
+
+**Testes:** `StoryOptimizerParamsTests` (limites, presets, sementes, nomes) e `StoryOptimizerImageTests` (motor de verdade:
+ruído dentro de ±N, canal andando 1px, cantos cheios após rotação, fundo desfocado, cor dominante, EXIF/GPS/XMP removidos,
+JPEG progressivo/4:4:4 conforme o sorteio, PNG limpo, mesma semente = mesmo arquivo). As amostras vão para o artefato
+`amostras-otimizador-stories` do CI.
+
 ## Nicho: cassino e bet
 
 O app atende um único nicho: anúncios de **cassino online** e **apostas esportivas (bet)** de operadores autorizados no Brasil
@@ -85,7 +118,7 @@ guarda o número do eixo no catálogo (`Variation.axisNumber`), mostrado na revi
 | `Models/` | `Niche` (cassino e bet), `Job`, `JobItem`, `Variation`, `ClientProfile`, `DefaultAxes` (gerado), `AppSettings` |
 | `Storage/` | Chaves de API (`chaves.json`), perfis de clientes (JSON), lotes (JSON + imagens), caminhos |
 | `Providers/` | Interface `AIProvider` e implementações Gemini (Interactions API) e OpenAI |
-| `Pipeline/` | `JobRunner` (fila e etapas), `Prompts`, `ImageTools`, `Exporter`, `CostEstimator` |
+| `Pipeline/` | `JobRunner` (fila e etapas), `Prompts`, `ImageTools`, `Exporter`, `CostEstimator`; Otimizador em Lote (`StoryOptimizer*`, `StoryBatch`) |
 | `System/` | Itens de Início (`SMAppService`), notificações, seletores de pasta |
 | `Updater/` | Busca nas GitHub Releases, SHA-256, verificação de assinatura, substituição do app |
 | `Views/` | Telas SwiftUI |
@@ -99,6 +132,7 @@ guarda o número do eixo no catálogo (`Variation.axisNumber`), mostrado na revi
 | Perfis de clientes | `~/Library/Application Support/IMP Criativos/clients/*.json` | Nunca |
 | Lotes | `…/jobs/<id>/job.json` + `originais/`, `limpos/`, `variacoes/` | Nunca |
 | Exportados | Pasta escolhida pelo usuário | Nunca |
+| Otimizador em Lote | Opções em UserDefaults; arquivos em `<pasta escolhida>/stories_<data_hora>/` | Nunca |
 | Histórico (logs) | `…/logs/AAAA-MM.jsonl` (um arquivo por mês, guarda 6 meses) | Nunca |
 
 Cada passo do lote é salvo no `job.json` assim que termina. Se o app fechar no meio, o lote é retomado ao abrir;
@@ -216,7 +250,7 @@ identidade entre versões (com verificação de origem no atualizador).
 
 ## Publicação
 
-- `ci.yml`: compila a cada push em `main`/`dev` e mostra erros como anotações.
+- `ci.yml`: compila a libjpeg-turbo (com cache), o app e roda os testes a cada push em `main`/`dev`; mostra erros como anotações.
 - `release.yml`: quando o arquivo `VERSION` muda na `main`, compila em Release, empacota `.dmg`, `.zip` e `.sha256`,
   cria a tag `v<VERSION>` e publica a Release (pré-lançamento quando a versão tem `-beta`).
 
