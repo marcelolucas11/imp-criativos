@@ -64,6 +64,8 @@ jobs:
               if i > 0 { jitter.append(t1.timeIntervalSince(t0) * 1000); lines.append(t2.timeIntervalSince(t1) * 1000) }
           }
           print("Texturas em Release 1080x1920: serrilhado \(String(format: "%.0f", jitter.min()!)) ms, linhas \(String(format: "%.0f", lines.min()!)) ms")
+          // limites largos (o medido fica perto de 30 ms e 10 ms): pegam uma regressão grande sem depender da máquina do CI
+          if jitter.min()! > 400 || lines.min()! > 150 { print("Texturas lentas demais em Release"); exit(1) }
           EOF
           swiftc -O Sources/IMPCriativos/Pipeline/StoryOptimizerParams.swift Sources/IMPCriativos/Pipeline/StoryTextureEffects.swift /tmp/bench/main.swift -o /tmp/bench/bench
           /tmp/bench/bench
