@@ -159,4 +159,4 @@ Legenda: [x] pronto · [~] parcial · [ ] falta
 ### Fase 7 — verificação
 - [x] CI verde (Mac, Windows, Linux)
 - [x] Capturas conferidas (prévias no log do teste de fumaça)
-- [ ] Release `v1.0.0-beta.27` com um único `.zip`
+- [x] Release `v1.0.0-beta.27` com um único `.zip` (o do Mac); links fixos `mac` e `windows` respondendo
