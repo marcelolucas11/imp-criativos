@@ -235,6 +235,86 @@ final class StoryOptimizerImageTests: XCTestCase {
         XCTAssertLessThanOrEqual(s.maxV - s.minV, 10)
     }
 
+    // MARK: - beta.22: riscos diagonais, temperatura, vinheta, perspectiva
+
+    /// Imagem lisa + riscos: só três níveis (base − a, base, base + a), constantes ao longo de uma diagonal, média igual.
+    func testDiagonalLinesDarkenLightenAndKeepTone() throws {
+        let flatPx = try pixels(compose(flat(0.5, 0.5, 0.5), coverOptions, StoryParams()))
+        let base = Int(flatPx[4])
+        for (period, anti) in [(3, false), (4, true)] {
+            var p = StoryParams()
+            p.diagonalAmplitude = 6
+            p.diagonalPeriod = period
+            p.diagonalAnti = anti
+            p.diagonalPhase = 1
+            let px = try pixels(compose(flat(0.5, 0.5, 0.5), coverOptions, p))
+            let s = channelStats(px, channel: 1)
+            print("riscos período \(period): média \(s.mean) min \(s.minV) max \(s.maxV)")
+            XCTAssertEqual(s.mean, Double(base), accuracy: 0.6, "o tom geral não muda")
+            XCTAssertEqual(Double(s.minV), Double(base - 6), accuracy: 1)
+            XCTAssertEqual(Double(s.maxV), Double(base + 6), accuracy: 1)
+            var levels = Set<Int>()
+            var down = 0, up = 0, samples = 0
+            for y in stride(from: 100, to: 1800, by: 37) {
+                for x in stride(from: 50, to: 1000, by: 29) {
+                    let v = Int(px[(y * 1080 + x) * 4 + 1])
+                    levels.insert(v)
+                    if v == Int(px[((y + 1) * 1080 + x + 1) * 4 + 1]) { down += 1 }
+                    if v == Int(px[((y - 1) * 1080 + x + 1) * 4 + 1]) { up += 1 }
+                    samples += 1
+                }
+            }
+            XCTAssertLessThanOrEqual(levels.count, 3 + 2, "só escurece, mantém e clareia: \(levels.sorted())")
+            XCTAssertEqual(max(down, up), samples, "constante ao longo de uma das diagonais")
+        }
+    }
+
+    func testTemperaturePositiveIsWarmer() throws {
+        let gray = flat(0.5, 0.5, 0.5)
+        var p = StoryParams()
+        p.temperatureKelvin = 500
+        let warm = try pixels(compose(gray, coverOptions, p))
+        p.temperatureKelvin = -500
+        let cool = try pixels(compose(gray, coverOptions, p))
+        let w = pixel(warm, x: 540, y: 960), c = pixel(cool, x: 540, y: 960)
+        print("temperatura +500K: \(w) · −500K: \(c)")
+        XCTAssertGreaterThan(w.r - w.b, 2, "+ deixa mais quente (mais vermelho que azul)")
+        XCTAssertLessThan(c.r - c.b, -2, "− deixa mais fria")
+        XCTAssertLessThan(abs(w.r - w.b), 40, "sutil")
+    }
+
+    func testVignetteChangesCornersNotCenter() throws {
+        let gray = flat(0.5, 0.5, 0.5)
+        let base = pixel(try pixels(compose(gray, coverOptions, StoryParams())), x: 540, y: 960).g
+        var p = StoryParams()
+        p.vignette = -0.10
+        let dark = try pixels(compose(gray, coverOptions, p))
+        XCTAssertEqual(Double(pixel(dark, x: 540, y: 960).g), Double(base), accuracy: 1)
+        XCTAssertEqual(Double(pixel(dark, x: 0, y: 0).g), Double(base) - 25.5, accuracy: 3, "canto escurece 10% da escala")
+        p.vignette = 0.10
+        let light = try pixels(compose(gray, coverOptions, p))
+        XCTAssertEqual(Double(pixel(light, x: 1079, y: 1919).g), Double(base) + 25.5, accuracy: 3)
+    }
+
+    /// Agressivo no extremo de tudo (recorte, rotação, perspectiva): nenhum canto vazio.
+    func testAggressiveGeometryLeavesNoEmptyCorners() throws {
+        let green = flat(0.1, 0.8, 0.2)
+        for sign in [-1.0, 1.0] {
+            var p = StoryParams()
+            p.cropFraction = 0.05
+            p.cropShiftX = sign
+            p.cropShiftY = sign
+            p.rotationDegrees = 2 * sign
+            p.perspectiveMax = 0.015
+            p.perspective = (0..<8).map { i in (i % 2 == 0 ? sign : -sign) * 0.015 }
+            let px = try pixels(compose(green, coverOptions, p))
+            for (x, y) in [(0, 0), (1079, 0), (0, 1919), (1079, 1919), (540, 0), (0, 960)] {
+                let c = pixel(px, x: x, y: y)
+                XCTAssertGreaterThan(c.g, 180, "ponto (\(x),\(y)) vazio")
+            }
+        }
+    }
+
     // MARK: - Arquivo final
 
     /// Ponteiro simples pelos marcadores do JPEG (até o início dos dados da imagem).
@@ -369,7 +449,7 @@ final class StoryOptimizerImageTests: XCTestCase {
         try? FileManager.default.copyItem(at: source, to: Self.samples.appendingPathComponent("0-entrada-4000x3000.png"))
         var timings: [Double] = []
         for (i, fit) in StoryFit.allCases.enumerated() {
-            for intensity in [StoryIntensity.light, .moderate] {
+            for intensity in [StoryIntensity.light, .moderate, .normal, .aggressive] {
                 var o = StoryOptions()
                 o.fit = fit
                 o.intensity = intensity
@@ -382,9 +462,10 @@ final class StoryOptimizerImageTests: XCTestCase {
         }
         // ampliação 4x de um pedaço, para ver ruído e granulação
         var o = StoryOptions()
-        o.intensity = .moderate
+        o.intensity = .aggressive
         o.fit = .cover
         let params = StoryParams.sample(o, seed: 100)
+        print("zoom agressivo: \(params.summary)")
         let cg = try XCTUnwrap(StoryOptimizer.loadSource(source))
         let crop = StoryOptimizer.compose(cg, options: o, params: params, background: .black)
             .cropped(to: CGRect(x: 400, y: 900, width: 270, height: 480))
@@ -393,17 +474,17 @@ final class StoryOptimizerImageTests: XCTestCase {
             .transformed(by: CGAffineTransform(scaleX: 4, y: 4))
         let zoomed = try XCTUnwrap(StoryOptimizer.context.createCGImage(crop, from: CGRect(x: 0, y: 0, width: 1080, height: 1920)))
         _ = write(zoomed, "zoom.png")
-        try? FileManager.default.copyItem(at: tmp.appendingPathComponent("zoom.png"), to: Self.samples.appendingPathComponent("9-zoom-4x-moderado.png"))
+        try? FileManager.default.copyItem(at: tmp.appendingPathComponent("zoom.png"), to: Self.samples.appendingPathComponent("9-zoom-4x-agressivo.png"))
         // folha de contato (3×2) em base64 no log, para conferir sem baixar o artefato
         let outputs = StoryFit.allCases.enumerated().flatMap { i, fit in
-            [StoryIntensity.light, .moderate].map { Self.samples.appendingPathComponent("\(i + 1)-\(fit.rawValue)-\($0.rawValue).jpg") }
+            [StoryIntensity.light, .moderate, .normal, .aggressive].map { Self.samples.appendingPathComponent("\(i + 1)-\(fit.rawValue)-\($0.rawValue).jpg") }
         }
-        let tileW = 360, tileH = 640
-        let sheet = makeImage(tileW * 2, tileH * 3) { ctx in
+        let tileW = 270, tileH = 480
+        let sheet = makeImage(tileW * 4, tileH * 3) { ctx in
             ctx.interpolationQuality = .high
             for (n, url) in outputs.enumerated() {
                 guard let img = decode(url)?.image else { continue }
-                let col = n % 2, row = 2 - n / 2
+                let col = n % 4, row = 2 - n / 4
                 ctx.draw(img, in: CGRect(x: col * tileW, y: row * tileH, width: tileW, height: tileH))
             }
         }

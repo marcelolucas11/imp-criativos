@@ -11,8 +11,9 @@ import CTurboJPEG
 ///
 /// Ordem por imagem:
 ///   leitura (orientação EXIF aplicada, maior lado até 4096 px) → espelho (opcional) → enquadramento 9:16
-///   → micro-recorte/rotação → brilho/contraste/saturação → nitidez ou suavização → deslocamento de canal
-///   → granulação → micro-ruído → pixels novos em sRGB → JPEG (libjpeg-turbo) ou PNG (ImageIO), sem metadados.
+///   → micro-recorte/rotação → micro-perspectiva → brilho/contraste/saturação → temperatura → nitidez ou suavização
+///   → deslocamento de canal → granulação → riscos diagonais → vinheta → micro-ruído
+///   → pixels novos em sRGB → JPEG (libjpeg-turbo) ou PNG (ImageIO), sem metadados.
 ///
 /// Os metadados somem porque a imagem é redesenhada do zero num buffer novo: EXIF, IPTC, XMP, GPS, comentários
 /// e perfis de cor antigos não passam para o arquivo. Só entra um perfil sRGB limpo, para as cores não mudarem.
@@ -130,6 +131,21 @@ enum StoryOptimizer {
                 .cropped(to: frame)
         }
 
+        // 2b) Micro-perspectiva (beta.22): amplia pela folga e move cada canto dentro dela — o quadro continua coberto
+        if params.perspectiveMax > 0, params.perspective.count == 8 {
+            let m = CGFloat(min(params.perspectiveMax, 0.05))
+            let big = centered(lanczos(out, 1 + 2 * m), in: frame)
+            let ex = m * W, ey = m * H
+            let c = params.perspective.map { CGFloat(max(-Double(m), min(Double(m), $0))) }
+            let f = CIFilter.perspectiveTransform()
+            f.inputImage = big
+            f.bottomLeft = CGPoint(x: -ex + c[0] * W, y: -ey + c[1] * H)
+            f.bottomRight = CGPoint(x: W + ex + c[2] * W, y: -ey + c[3] * H)
+            f.topRight = CGPoint(x: W + ex + c[4] * W, y: H + ey + c[5] * H)
+            f.topLeft = CGPoint(x: -ex + c[6] * W, y: H + ey + c[7] * H)
+            out = (f.outputImage ?? out).cropped(to: frame)
+        }
+
         // 3) Brilho, contraste e saturação
         if params.brightness != 0 || params.contrast != 0 || params.saturation != 0 {
             let f = CIFilter.colorControls()
@@ -137,6 +153,15 @@ enum StoryOptimizer {
             f.brightness = Float(params.brightness)
             f.contrast = Float(1 + params.contrast)
             f.saturation = Float(1 + params.saturation)
+            out = (f.outputImage ?? out).cropped(to: frame)
+        }
+
+        // 3b) Temperatura de cor (beta.22): + mais quente, − mais fria
+        if params.temperatureKelvin != 0 {
+            let f = CIFilter.temperatureAndTint()
+            f.inputImage = out
+            f.neutral = CIVector(x: 6500, y: 0)
+            f.targetNeutral = CIVector(x: CGFloat(6500 - params.temperatureKelvin), y: 0)
             out = (f.outputImage ?? out).cropped(to: frame)
         }
 
@@ -191,6 +216,27 @@ enum StoryOptimizer {
             out = (mix.outputImage ?? out).cropped(to: frame)
         }
 
+        // 6b) Riscos diagonais pixel a pixel (beta.22): uma linha escurece, a seguinte clareia, a outra mantém o tom.
+        //     Camada 0,5 ± k/2 em linear light → base ± k. A média do padrão é zero: o tom geral não muda.
+        if params.diagonalAmplitude > 0, let layer = diagonalLayer(params) {
+            out = layer.applyingFilter("CILinearLightBlendMode", parameters: [kCIInputBackgroundImageKey: out]).cropped(to: frame)
+        }
+
+        // 6c) Vinheta (beta.22): cantos somam ±v da escala, o centro fica igual
+        if params.vignette != 0 {
+            let half = (W * W + H * H).squareRoot() / 2
+            let edge = 0.5 + CGFloat(params.vignette) / 2
+            let f = CIFilter.radialGradient()
+            f.center = CGPoint(x: W / 2, y: H / 2)
+            f.radius0 = Float(half * 0.45)
+            f.radius1 = Float(half)
+            f.color0 = CIColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+            f.color1 = CIColor(red: edge, green: edge, blue: edge, alpha: 1)
+            if let layer = f.outputImage?.cropped(to: frame) {
+                out = layer.applyingFilter("CILinearLightBlendMode", parameters: [kCIInputBackgroundImageKey: out]).cropped(to: frame)
+            }
+        }
+
         // 7) Micro-ruído uniforme de ±N níveis por canal (quebra faixas de cor na compressão do Instagram)
         if params.noiseAmplitude > 0, let noise = CIFilter.randomGenerator().outputImage {
             // linear light: resultado = base + 2·camada − 1 → camada = 0,5 + (u − 0,5)·k dá base ± k
@@ -212,6 +258,31 @@ enum StoryOptimizer {
         }
 
         return out.cropped(to: frame)
+    }
+
+    /// Ladrilho p×p do padrão diagonal (valores em ponto flutuante, sem gestão de cor), repetido no quadro todo.
+    static func diagonalLayer(_ params: StoryParams) -> CIImage? {
+        let p = params.diagonalPeriod == 4 ? 4 : 3
+        let k = Float(params.diagonalAmplitude / 255)
+        var values = [Float](repeating: 0, count: p * p * 4)
+        for y in 0..<p {
+            for x in 0..<p {
+                let sign = Float(StoryParams.diagonalSign(x: x, y: y, period: p, anti: params.diagonalAnti, phase: params.diagonalPhase))
+                let v = 0.5 + sign * k / 2
+                let i = (y * p + x) * 4
+                values[i] = v
+                values[i + 1] = v
+                values[i + 2] = v
+                values[i + 3] = 1
+            }
+        }
+        let data = values.withUnsafeBufferPointer { Data(buffer: $0) }
+        let tile = CIImage(bitmapData: data, bytesPerRow: p * 4 * MemoryLayout<Float>.size,
+                           size: CGSize(width: p, height: p), format: .RGBAf, colorSpace: nil)
+        let f = CIFilter.affineTile()
+        f.inputImage = tile.samplingNearest()
+        f.transform = .identity
+        return f.outputImage?.samplingNearest().cropped(to: canvas)
     }
 
     // MARK: - Saída

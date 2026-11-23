@@ -123,6 +123,9 @@ struct StoryOptimizerView: View {
                     ForEach(StoryIntensity.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                Text(batch.options.intensity.hint)
+                    .font(.caption)
+                    .foregroundStyle(batch.options.intensity == .aggressive ? Brand.warning : .secondary)
                 if batch.options.intensity == .custom {
                     customControls
                 } else {
@@ -146,13 +149,23 @@ struct StoryOptimizerView: View {
                      ? "JPEG pela libjpeg-turbo, qualidade sorteada entre 88 e 93, só com perfil sRGB (sem EXIF, XMP, IPTC nem comentários)."
                      : "PNG sem perda (arquivos bem maiores). Sem metadados, só com perfil sRGB.")
                     .font(.caption).foregroundStyle(.secondary)
+                Stepper(value: $batch.options.versionsPerImage, in: StoryOptions.versionsRange) {
+                    LabeledContent("Versões por imagem") {
+                        Text("\(batch.options.versions)").monospacedDigit()
+                    }
+                }
+                if batch.options.versions > 1 {
+                    Text("Cada versão sai com um sorteio diferente (story_001_v1, story_001_v2…). Total: \(batch.items.count * batch.options.versions) arquivos.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Nomes", selection: $batch.options.naming) {
                     ForEach(StoryNaming.allCases) { Text($0.label).tag($0) }
                 }
                 TextField("Prefixo", text: $batch.options.prefix, prompt: Text("story"))
                 Text("Exemplo: " + StoryNames.fileName(index: 1, total: max(batch.items.count, 1), prefix: batch.options.prefix,
                                                        code: "a8f3k", naming: batch.options.naming,
-                                                       ext: batch.options.format.fileExtension))
+                                                       ext: batch.options.format.fileExtension,
+                                                       version: batch.options.versions > 1 ? 1 : nil))
                     .font(.caption.monospaced()).foregroundStyle(.secondary)
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -180,8 +193,12 @@ struct StoryOptimizerView: View {
     private var customControls: some View {
         Toggle("Micro-recorte e micro-rotação", isOn: $batch.options.custom.geometry)
         if batch.options.custom.geometry {
-            slider("Recorte máximo por borda", $batch.options.custom.cropMaxPercent, StoryAdjustments.cropRange, step: 0.1, format: "0,5–%.1f%%")
+            slider("Recorte máximo por borda", $batch.options.custom.cropMaxPercent, StoryAdjustments.cropRange, step: 0.1, format: "até %.1f%%")
             slider("Rotação máxima", $batch.options.custom.rotationMaxDegrees, StoryAdjustments.rotationRange, step: 0.05, format: "±%.2f°")
+        }
+        Toggle("Micro-perspectiva (cantos)", isOn: $batch.options.custom.perspective)
+        if batch.options.custom.perspective {
+            slider("Deslocamento máximo dos cantos", $batch.options.custom.perspectiveMaxPercent, StoryAdjustments.perspectiveRange, step: 0.1, format: "±%.1f%%")
         }
         Toggle("Brilho, contraste e saturação", isOn: $batch.options.custom.photometric)
         if batch.options.custom.photometric {
@@ -189,14 +206,33 @@ struct StoryOptimizerView: View {
             slider("Contraste", $batch.options.custom.contrastMaxPercent, StoryAdjustments.contrastRange, step: 0.1, format: "±%.1f%%")
             slider("Saturação", $batch.options.custom.saturationMaxPercent, StoryAdjustments.saturationRange, step: 0.1, format: "±%.1f%%")
         }
+        Toggle("Temperatura de cor (mais quente / mais fria)", isOn: $batch.options.custom.temperature)
+        if batch.options.custom.temperature {
+            slider("Temperatura máxima", $batch.options.custom.temperatureMaxKelvin, StoryAdjustments.temperatureRange, step: 25, format: "±%.0fK")
+        }
         Toggle("Micro-ruído (anti-banding)", isOn: $batch.options.custom.noise)
         if batch.options.custom.noise {
-            slider("Amplitude máxima", $batch.options.custom.noiseMaxAmplitude, StoryAdjustments.noiseRange, step: 0.25, format: "±2–%.2f níveis")
+            slider("Amplitude máxima", $batch.options.custom.noiseMaxAmplitude, StoryAdjustments.noiseRange, step: 0.25, format: "até ±%.2f níveis")
         }
-        Toggle("Deslocamento de canal (1px no R ou B)", isOn: $batch.options.custom.chromaticShift)
+        Toggle("Riscos diagonais pixel a pixel (escurece, clareia, mantém)", isOn: $batch.options.custom.diagonal)
+        if batch.options.custom.diagonal {
+            slider("Intensidade máxima dos riscos", $batch.options.custom.diagonalMaxAmplitude, StoryAdjustments.diagonalRange, step: 0.5, format: "até ±%.1f níveis")
+        }
+        Toggle("Deslocamento de canal (R ou B)", isOn: $batch.options.custom.chromaticShift)
+        if batch.options.custom.chromaticShift {
+            Picker("Deslocamento máximo", selection: $batch.options.custom.chromaticMaxPixels) {
+                Text("1px").tag(1)
+                Text("até 2px").tag(2)
+            }
+            .pickerStyle(.segmented)
+        }
         Toggle("Granulação de filme (overlay / soft-light)", isOn: $batch.options.custom.filmGrain)
         if batch.options.custom.filmGrain {
-            slider("Opacidade máxima", $batch.options.custom.grainMaxOpacityPercent, StoryAdjustments.grainRange, step: 0.25, format: "1–%.2f%%")
+            slider("Opacidade máxima", $batch.options.custom.grainMaxOpacityPercent, StoryAdjustments.grainRange, step: 0.25, format: "até %.2f%%")
+        }
+        Toggle("Vinheta (bordas mais escuras ou mais claras)", isOn: $batch.options.custom.vignette)
+        if batch.options.custom.vignette {
+            slider("Vinheta máxima nos cantos", $batch.options.custom.vignetteMaxPercent, StoryAdjustments.vignetteRange, step: 0.5, format: "±%.1f%%")
         }
         Toggle("Micro-nitidez ou suavização (sorteado)", isOn: $batch.options.custom.detail)
         Toggle("Variar compressão JPEG (baseline/progressivo, 4:2:0/4:4:4)", isOn: $batch.options.custom.jpegVariation)
@@ -230,13 +266,19 @@ struct StoryOptimizerView: View {
     /// Resumo do preset em uma linha.
     static func describe(_ a: StoryAdjustments, format: StoryOutputFormat) -> String {
         var parts: [String] = []
-        if a.geometry { parts.append(String(format: "recorte 0,5–%.1f%% e rotação ±%.1f°", a.cropMaxPercent, a.rotationMaxDegrees)) }
+        if a.geometry {
+            parts.append(String(format: "recorte %.1f–%.1f%% e rotação ±%.1f°", a.cropMinPercent, a.cropMaxPercent, a.rotationMaxDegrees))
+        }
+        if a.perspective { parts.append(String(format: "perspectiva ±%.1f%%", a.perspectiveMaxPercent)) }
         if a.photometric {
             parts.append(String(format: "brilho e contraste ±%.0f%%, saturação ±%.1f%%", a.brightnessMaxPercent, a.saturationMaxPercent))
         }
-        if a.noise { parts.append(String(format: "ruído ±2–%.1f", a.noiseMaxAmplitude)) }
-        if a.chromaticShift { parts.append("deslocamento de canal 1px") }
-        if a.filmGrain { parts.append(String(format: "granulação 1–%.0f%%", a.grainMaxOpacityPercent)) }
+        if a.temperature { parts.append(String(format: "temperatura ±%.0fK", a.temperatureMaxKelvin)) }
+        if a.noise { parts.append(String(format: "ruído ±%.1f–%.1f", a.noiseMinAmplitude, a.noiseMaxAmplitude)) }
+        if a.diagonal { parts.append(String(format: "riscos diagonais ±%.0f–%.0f", a.diagonalMinAmplitude, a.diagonalMaxAmplitude)) }
+        if a.chromaticShift { parts.append(a.chromaticMaxPixels >= 2 ? "deslocamento de canal até 2px" : "deslocamento de canal 1px") }
+        if a.filmGrain { parts.append(String(format: "granulação %.0f–%.0f%%", a.grainMinOpacityPercent, a.grainMaxOpacityPercent)) }
+        if a.vignette { parts.append(String(format: "vinheta ±%.0f%%", a.vignetteMaxPercent)) }
         if a.detail { parts.append("nitidez ou suavização") }
         if a.jpegVariation, format == .jpg { parts.append("JPEG baseline/progressivo e 4:2:0/4:4:4") }
         return "Sorteado por imagem: " + parts.joined(separator: " · ").replacingOccurrences(of: ".", with: ",") + "."
@@ -266,6 +308,13 @@ struct StoryOptimizerView: View {
                         previewPane("Depois · 1080×1920", batch.previewAfter)
                     }
                     Text(item.url.lastPathComponent).font(.caption).lineLimit(1).truncationMode(.middle)
+                    if batch.options.versions > 1 {
+                        Stepper(value: $batch.previewVersion, in: 1...batch.options.versions) {
+                            Text("Versão \(batch.previewVersion) de \(batch.options.versions)").font(.caption)
+                        }
+                        .controlSize(.small)
+                        .disabled(batch.running)
+                    }
                     if !batch.previewSummary.isEmpty {
                         Text(batch.previewSummary).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
@@ -347,8 +396,8 @@ struct StoryOptimizerView: View {
                         .disabled(batch.items.isEmpty || batch.outputFolder == nil)
                     }
                 }
-                if batch.running || batch.finishedCount > 0 {
-                    ProgressView(value: Double(batch.finishedCount), total: Double(max(batch.items.count, 1)))
+                if batch.running || batch.processedOutputs > 0 {
+                    ProgressView(value: Double(batch.processedOutputs), total: Double(max(batch.totalOutputs, 1)))
                 }
                 Text("Processa \(StoryBatch.concurrency) imagens por vez. Dá para trocar de aba enquanto roda.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -358,8 +407,16 @@ struct StoryOptimizerView: View {
 
     private var statusTitle: String {
         let total = batch.items.count
-        if batch.running { return "\(batch.finishedCount) de \(total) imagens processadas" }
-        if batch.finishedCount > 0 { return "\(batch.doneCount) de \(total) imagens prontas" }
+        if batch.running {
+            return batch.totalOutputs > total
+                ? "\(batch.processedOutputs) de \(batch.totalOutputs) arquivos processados"
+                : "\(batch.processedOutputs) de \(total) imagens processadas"
+        }
+        if batch.finishedCount > 0 {
+            return batch.totalOutputs > total
+                ? "\(batch.writtenOutputs) de \(batch.totalOutputs) arquivos prontos"
+                : "\(batch.doneCount) de \(total) imagens prontas"
+        }
         return total == 0 ? "Nenhuma imagem na lista" : "\(total) imagem(ns) prontas para processar"
     }
 }

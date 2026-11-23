@@ -51,6 +51,8 @@ final class StoryBatch: ObservableObject {
         var output: URL?
         var bytes: Int?
         var summary: String?
+        /// 1.0.0-beta.22: versões desta imagem já gravadas (com várias versões por imagem).
+        var doneVersions = 0
     }
 
     @Published private(set) var items: [Item] = []
@@ -58,6 +60,7 @@ final class StoryBatch: ObservableObject {
     @Published var options: StoryOptions {
         didSet {
             guard options != oldValue else { return }
+            if previewVersion > options.versions { previewVersion = options.versions }
             save()
             refreshPreview()
         }
@@ -69,6 +72,12 @@ final class StoryBatch: ObservableObject {
     @Published private(set) var cancelling = false
     @Published private(set) var lastRunFolder: URL? = nil
     @Published private(set) var zipping = false
+    /// 1.0.0-beta.22: arquivos do lote (imagens × versões) e quantos já terminaram (prontos ou com erro).
+    @Published private(set) var totalOutputs = 0
+    @Published private(set) var processedOutputs = 0
+    @Published private(set) var writtenOutputs = 0
+    /// Versão mostrada no preview (1…versões por imagem).
+    @Published var previewVersion = 1 { didSet { if previewVersion != oldValue { refreshPreview() } } }
     @Published var notice: String? = nil
 
     // preview
@@ -173,7 +182,11 @@ final class StoryBatch: ObservableObject {
             items[i].output = nil
             items[i].bytes = nil
             items[i].summary = nil
+            items[i].doneVersions = 0
         }
+        processedOutputs = 0
+        writtenOutputs = 0
+        totalOutputs = 0
     }
 
     // MARK: - Fila
@@ -202,33 +215,43 @@ final class StoryBatch: ObservableObject {
 
         let opts = options
         let total = items.count
-        let jobs: [(id: UUID, url: URL, params: StoryParams, name: String)] = items.enumerated().map { index, item in
-            let p = StoryParams.sample(opts, seed: item.seed)
-            let name = StoryNames.fileName(index: index + 1, total: total, prefix: opts.prefix, code: p.code,
-                                           naming: opts.naming, ext: opts.format.fileExtension)
-            return (item.id, item.url, p, name)
+        let versions = opts.versions
+        var jobs: [(id: UUID, url: URL, params: StoryParams, name: String)] = []
+        // 1.0.0-beta.22: cada imagem sai em N versões, cada uma com o seu sorteio (a versão 1 é a do preview)
+        for (index, item) in items.enumerated() {
+            for v in 1...versions {
+                let p = StoryParams.sample(opts, seed: StoryVersions.seed(item.seed, version: v))
+                let name = StoryNames.fileName(index: index + 1, total: total, prefix: opts.prefix, code: p.code,
+                                               naming: opts.naming, ext: opts.format.fileExtension,
+                                               version: versions > 1 ? v : nil)
+                jobs.append((item.id, item.url, p, name))
+            }
         }
+        totalOutputs = jobs.count
         let cap = Self.concurrency
         let started = Date()
-        AppLog.info(.exportacao, "Otimizador em Lote: \(total) imagem(ns) → \(dest.lastPathComponent)",
+        AppLog.info(.exportacao, "Otimizador em Lote: \(total) imagem(ns) × \(versions) versão(ões) → \(dest.lastPathComponent)",
                     details: "Enquadramento: \(opts.fit.label) · Intensidade: \(opts.intensity.label) · Formato: \(opts.format.label)\(opts.mirror ? " · espelhado" : "")")
 
         runTask = Task { [weak self] in
             await BoundedParallel.run(jobs, limit: { cap }, work: { job -> Void? in
                 guard !Task.isCancelled else { return nil }
-                await self?.update(job.id) { $0.status = .processing }
+                await self?.update(job.id) { if $0.status == .pending { $0.status = .processing } }
                 let out = dest.appendingPathComponent(job.name)
                 do {
                     let bytes = try StoryOptimizer.process(source: job.url, options: opts, params: job.params, to: out)
-                    await self?.update(job.id) {
-                        $0.status = .done
-                        $0.output = out
-                        $0.bytes = bytes
-                        $0.summary = job.params.summary
+                    await self?.update(job.id, written: true) {
+                        $0.doneVersions += 1
+                        if $0.output == nil {
+                            $0.output = out
+                            $0.bytes = bytes
+                            $0.summary = job.params.summary
+                        }
+                        if $0.doneVersions >= versions, $0.status == .processing { $0.status = .done }
                     }
                 } catch {
                     let msg = error.localizedDescription
-                    await self?.update(job.id) { $0.status = .failed(msg) }
+                    await self?.update(job.id, written: false) { $0.status = .failed(msg) }
                 }
                 return nil
             }, followUp: { (_: Void) in })
@@ -242,7 +265,12 @@ final class StoryBatch: ObservableObject {
         runTask?.cancel()
     }
 
-    private func update(_ id: UUID, _ change: (inout Item) -> Void) {
+    /// `written`: nil = só muda o status; true/false = um arquivo terminou (gravado ou com erro).
+    private func update(_ id: UUID, written: Bool? = nil, _ change: (inout Item) -> Void) {
+        if let written {
+            processedOutputs += 1
+            if written { writtenOutputs += 1 }
+        }
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         change(&items[i])
     }
@@ -257,7 +285,9 @@ final class StoryBatch: ObservableObject {
         runTask = nil
         let seconds = Int(Date().timeIntervalSince(started).rounded())
         let done = doneCount, failed = failedCount
-        var text = "\(done) de \(items.count) imagens prontas em \(seconds)s"
+        var text = totalOutputs > items.count
+            ? "\(writtenOutputs) de \(totalOutputs) arquivos (\(done) de \(items.count) imagens completas) em \(seconds)s"
+            : "\(done) de \(items.count) imagens prontas em \(seconds)s"
         if failed > 0 { text += " · \(failed) com erro" }
         if wasCancelled { text += " · lote cancelado" }
         notice = text + "."
@@ -326,7 +356,7 @@ final class StoryBatch: ObservableObject {
             return
         }
         let opts = options
-        let seed = item.seed
+        let seed = StoryVersions.seed(item.seed, version: min(previewVersion, opts.versions))
         let url = item.url
         let cached = previewSource?.url == url ? previewSource?.image : nil
         previewLoading = true

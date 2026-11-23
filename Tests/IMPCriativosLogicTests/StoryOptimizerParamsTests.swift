@@ -58,6 +58,91 @@ final class StoryOptimizerParamsTests: XCTestCase {
         }
     }
 
+    /// 1.0.0-beta.22: Normal e Agressivo ficam dentro dos próprios limites e ligam as etapas novas.
+    func testNormalAndAggressiveRanges() {
+        for (intensity, a) in [(StoryIntensity.normal, StoryAdjustments.normal), (.aggressive, .aggressive)] {
+            let o = options(intensity)
+            var periods = Set<Int>(), anti = Set<Bool>(), twoPx = false
+            for seed: UInt64 in 0..<1500 {
+                let p = StoryParams.sample(o, seed: seed &* 6_364_136_223_846_793_005)
+                XCTAssertTrue((a.cropMinPercent / 100 - 1e-12...a.cropMaxPercent / 100 + 1e-12).contains(p.cropFraction))
+                XCTAssertLessThanOrEqual(abs(p.rotationDegrees), a.rotationMaxDegrees)
+                XCTAssertLessThanOrEqual(abs(p.brightness), a.brightnessMaxPercent / 100 + 1e-12)
+                XCTAssertLessThanOrEqual(abs(p.saturation), a.saturationMaxPercent / 100 + 1e-12)
+                XCTAssertLessThanOrEqual(abs(p.temperatureKelvin), a.temperatureMaxKelvin)
+                XCTAssertTrue((a.noiseMinAmplitude...a.noiseMaxAmplitude).contains(p.noiseAmplitude))
+                XCTAssertTrue((a.diagonalMinAmplitude...a.diagonalMaxAmplitude).contains(p.diagonalAmplitude))
+                XCTAssertTrue((a.grainMinOpacityPercent / 100 - 1e-12...a.grainMaxOpacityPercent / 100 + 1e-12).contains(p.grainOpacity))
+                XCTAssertLessThanOrEqual(abs(p.vignette), a.vignetteMaxPercent / 100 + 1e-12)
+                XCTAssertEqual(p.perspective.count, 8)
+                XCTAssertTrue(p.perspective.allSatisfy { abs($0) <= a.perspectiveMaxPercent / 100 + 1e-12 })
+                XCTAssertTrue((0..<p.diagonalPeriod).contains(p.diagonalPhase))
+                let shift = abs(p.chromaticDX) + abs(p.chromaticDY)
+                XCTAssertTrue((1...a.chromaticMaxPixels).contains(shift))
+                if shift == 2 { twoPx = true }
+                periods.insert(p.diagonalPeriod); anti.insert(p.diagonalAnti)
+            }
+            XCTAssertEqual(periods, [3, 4])
+            XCTAssertEqual(anti, [true, false])
+            XCTAssertEqual(twoPx, intensity == .aggressive, "2px só no Agressivo")
+        }
+        XCTAssertGreaterThan(StoryAdjustments.aggressive.cropMaxPercent, StoryAdjustments.normal.cropMaxPercent)
+        XCTAssertGreaterThan(StoryAdjustments.normal.cropMaxPercent, StoryAdjustments.moderate.cropMaxPercent)
+    }
+
+    /// Os níveis antigos não ganham as etapas novas (sementes antigas continuam dando o mesmo resultado).
+    func testOlderLevelsKeepNewStepsOff() {
+        for intensity in [StoryIntensity.light, .moderate] {
+            let p = StoryParams.sample(options(intensity), seed: 77)
+            XCTAssertEqual(p.diagonalAmplitude, 0)
+            XCTAssertTrue(p.perspective.isEmpty)
+            XCTAssertEqual(p.temperatureKelvin, 0)
+            XCTAssertEqual(p.vignette, 0)
+        }
+    }
+
+    func testDiagonalPatternDarkensLightensAndKeeps() {
+        for period in [3, 4] {
+            for anti in [false, true] {
+                var sum = 0
+                var seen = Set<Int>()
+                for y in 0..<12 {
+                    for x in 0..<12 {
+                        let v = StoryParams.diagonalSign(x: x, y: y, period: period, anti: anti, phase: 1)
+                        sum += v
+                        seen.insert(v)
+                        // constante ao longo da diagonal
+                        let (nx, ny) = anti ? (x + 1, y + 1) : (x + 1, y - 1)
+                        XCTAssertEqual(v, StoryParams.diagonalSign(x: nx, y: ny, period: period, anti: anti, phase: 1))
+                    }
+                }
+                XCTAssertEqual(seen, [-1, 0, 1], "escurece, mantém e clareia")
+                XCTAssertEqual(sum, 0, "média zero: o tom geral não muda")
+            }
+        }
+    }
+
+    func testVersionsHaveDistinctSeedsAndNames() {
+        let seeds = (1...10).map { StoryVersions.seed(42, version: $0) }
+        XCTAssertEqual(seeds[0], 42, "versão 1 = semente do preview")
+        XCTAssertEqual(Set(seeds).count, 10)
+        XCTAssertEqual(StoryNames.fileName(index: 3, total: 50, prefix: "story", code: "abcde", naming: .sequentialCode, ext: "jpg", version: 2),
+                       "story_003_v2_abcde.jpg")
+        var o = StoryOptions()
+        o.versionsPerImage = 99
+        XCTAssertEqual(o.versions, 10)
+    }
+
+    func testOldSavedCustomAdjustmentsStillDecode() throws {
+        let json = #"{"intensity":"custom","custom":{"geometry":false,"noiseMaxAmplitude":3}}"#.data(using: .utf8)!
+        let o = try JSONDecoder().decode(StoryOptions.self, from: json)
+        XCTAssertEqual(o.intensity, .custom)
+        XCTAssertFalse(o.custom.geometry)
+        XCTAssertEqual(o.custom.noiseMaxAmplitude, 3)
+        XCTAssertFalse(o.custom.diagonal, "campo novo assume o padrão")
+        XCTAssertEqual(o.versions, 1)
+    }
+
     func testAllQualitiesAndBothJPEGModesAppear() {
         let o = options(.moderate)
         var qualities = Set<Int>(), progressive = Set<Bool>(), chroma = Set<Bool>()
