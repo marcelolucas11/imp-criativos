@@ -333,6 +333,43 @@ enum StoryLineDirection: String, CaseIterable, Identifiable, Codable {
         case .random: return "Aleatória por imagem"
         }
     }
+
+    /// Rótulo curto dos botões de direção.
+    var shortLabel: String {
+        switch self {
+        case .backslash: return "Esquerda \\"
+        case .slash: return "Direita /"
+        case .cross: return "Cruzada X"
+        case .random: return "Aleatória"
+        }
+    }
+}
+
+/// 1.0.0-beta.25: estilo das linhas.
+/// - `tone`: mantém a cor. Só clareia e escurece o próprio pixel (multiplica R, G e B pelo mesmo fator), de leve, com borda suave,
+///   ângulo livre e linhas irregulares (riscos de comprimento e força diferentes, com falhas), como chuva ou filme riscado.
+/// - `ink`: gravura em preto e branco (beta.24): faixa escura com realce claro, pixel exato a 45°, hard-light ou overlay.
+enum StoryLineStyle: String, CaseIterable, Identifiable, Codable {
+    case tone
+    case ink
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .tone: return "Tom (mantém a cor)"
+        case .ink: return "Gravura (preto e branco)"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .tone:
+            return "Clareia e escurece o próprio pixel sem trocar a cor: o verde continua verde, o amarelo continua amarelo. Borda suave, riscos irregulares e quase nada sobre áreas muito claras (texto branco fica limpo)."
+        case .ink:
+            return "Faixa escura (preto) com um realce claro (branco) colado. Bem marcado e digital: aparece até sobre texto branco e fundo preto."
+        }
+    }
 }
 
 /// Modo de mistura das linhas com a imagem (beta.24: só os de alto impacto; Multiply e Soft-light saíram).
@@ -375,9 +412,9 @@ enum StoryTexturePreset: String, CaseIterable, Identifiable, Codable {
     var hint: String {
         switch self {
         case .off: return "Sem linhas, serrilhado, aberração nem bloom."
-        case .subtle: return "Linhas leves, micro-aberração e serrilhado mínimo. O texto continua limpo."
-        case .balanced: return "Linhas diagonais visíveis, serrilhado moderado e deslocamento RGB médio."
-        case .intense: return "Linhas marcadas, serrilhado alto, aberração cromática e bloom fortes. Confira o texto no zoom antes de processar o lote."
+        case .subtle: return "Linhas no tom da imagem (mantêm a cor), leves e irregulares, micro-aberração e serrilhado mínimo. O texto continua limpo."
+        case .balanced: return "Linhas no tom da imagem bem visíveis, serrilhado moderado e deslocamento RGB médio."
+        case .intense: return "Linhas em gravura preto e branco (X), serrilhado alto, aberração cromática e bloom fortes. Confira o texto no zoom antes de processar o lote."
         case .custom: return "Uma chave e um slider (0 a 100%) para cada efeito."
         }
     }
@@ -392,9 +429,13 @@ struct StoryTexture: Codable, Equatable {
     /// Intensidade (0–100%), com curva própria (ver `lineAlpha`): 10–25% visível e sutil, 50% bem marcado, 80–100% forte.
     var lineOpacityPercent = 50.0
     /// Em pixels da saída 1080×1920, medidos na horizontal. Espaçamento = período das linhas; espessura = faixa escura.
-    var lineSpacing = 8.0
-    var lineThickness = 3.0
+    var lineSpacing = 10.0
+    var lineThickness = 2.0
     var lineBlend: StoryLineBlend = .hardLight
+    /// 1.0.0-beta.25: estilo, ângulo (só no Tom; a Gravura fica em 45° pixel exato) e irregularidade (só no Tom).
+    var lineStyle: StoryLineStyle = .tone
+    var lineAngle = 55.0
+    var lineIrregularity = 60.0
     /// Serrilhado: quebra o anti-aliasing só nas bordas de alto contraste (texto, botões).
     var jitter = false
     var jitterPercent = 40.0
@@ -415,6 +456,19 @@ struct StoryTexture: Codable, Equatable {
     static let lineHighlightRatio = 0.6
     /// No modo Cruzada (X) cada camada usa 65% da opacidade, para a malha não escurecer nem estourar a imagem.
     static let lineCrossBalance = 0.65
+    /// Tom: ângulo das linhas em graus a partir da horizontal (45° = diagonal exata; mais alto = mais em pé).
+    static let angleRange: ClosedRange<Double> = 30...75
+    /// Tom: variação máxima do brilho no centro da linha com o slider em 100% (±35%). A cor nunca muda.
+    static let toneAmplitudeCap = 0.35
+    /// Tom: comprimento médio de cada trecho de risco (px) — a força muda de um trecho para o outro, e alguns somem.
+    static let toneSegmentLength = 36.0
+
+    /// Curva do slider no Tom (0 a 1) → variação de brilho no centro da linha:
+    /// 10% ≈ 5% · 25% ≈ 11% · 50% ≈ 20% · 80% ≈ 30% · 100% = 35%.
+    static func toneAmplitude(level: Double) -> Double {
+        let l = min(max(level.isFinite ? level : 0, 0), 1)
+        return toneAmplitudeCap * pow(l, 0.8)
+    }
 
     /// Curva do slider (0 a 1) → opacidade da faixa escura: 10% ≈ 0,17 · 25% ≈ 0,32 · 50% ≈ 0,52 · 80% ≈ 0,73 · 100% = 0,85.
     static func lineAlpha(level: Double) -> Double {
@@ -439,9 +493,12 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .random
-        t.lineOpacityPercent = 20
-        t.lineSpacing = 12
+        t.lineStyle = .tone
+        t.lineOpacityPercent = 30
+        t.lineSpacing = 10
         t.lineThickness = 2
+        t.lineAngle = 55
+        t.lineIrregularity = 60
         t.lineBlend = .hardLight
         t.jitter = true
         t.jitterPercent = 15
@@ -455,9 +512,12 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .random
-        t.lineOpacityPercent = 50
-        t.lineSpacing = 8
+        t.lineStyle = .tone
+        t.lineOpacityPercent = 60
+        t.lineSpacing = 9
         t.lineThickness = 3
+        t.lineAngle = 55
+        t.lineIrregularity = 50
         t.lineBlend = .hardLight
         t.jitter = true
         t.jitterPercent = 45
@@ -471,6 +531,7 @@ struct StoryTexture: Codable, Equatable {
         var t = StoryTexture()
         t.lines = true
         t.lineDirection = .cross
+        t.lineStyle = .ink
         t.lineOpacityPercent = 85
         t.lineSpacing = 8
         t.lineThickness = 4
@@ -492,6 +553,8 @@ struct StoryTexture: Codable, Equatable {
         t.lineSpacing = c(lineSpacing, Self.spacingRange).rounded()
         // pelo menos 2px de folga: sobra espaço para a faixa de realce e para um intervalo
         t.lineThickness = max(Self.thicknessRange.lowerBound, min(c(lineThickness, Self.thicknessRange).rounded(), t.lineSpacing - 2))
+        t.lineAngle = c(lineAngle, Self.angleRange).rounded()
+        t.lineIrregularity = c(lineIrregularity, Self.percentRange)
         t.jitterPercent = c(jitterPercent, Self.percentRange)
         t.aberrationPercent = c(aberrationPercent, Self.percentRange)
         t.bloomPercent = c(bloomPercent, Self.percentRange)
@@ -511,6 +574,10 @@ struct StoryTexture: Codable, Equatable {
         lineSpacing = v(.lineSpacing, lineSpacing)
         lineThickness = v(.lineThickness, lineThickness)
         lineBlend = v(.lineBlend, lineBlend)
+        // opções salvas antes da beta.25 não têm estilo: eram todas gravura
+        lineStyle = v(.lineStyle, StoryLineStyle.ink)
+        lineAngle = v(.lineAngle, lineAngle)
+        lineIrregularity = v(.lineIrregularity, lineIrregularity)
         jitter = v(.jitter, jitter)
         jitterPercent = v(.jitterPercent, jitterPercent)
         aberration = v(.aberration, aberration)
@@ -659,6 +726,12 @@ struct StoryParams: Equatable {
     /// Deslocamento aleatório das linhas nesta imagem (0 a espaçamento − 1). No X, a segunda diagonal tem a própria fase.
     var linePhase = 0
     var linePhase2 = 0
+    /// 1.0.0-beta.25: no Tom, `lineOpacity` é a variação de brilho no centro da linha (0,35 = ±35%), `lineAngle` em graus,
+    /// `lineIrregularity` de 0 a 1 e `lineSeed` sorteia o desenho dos riscos desta imagem. Padrão gravura, como antes.
+    var lineStyle: StoryLineStyle = .ink
+    var lineAngle = 45.0
+    var lineIrregularity = 0.0
+    var lineSeed: UInt64 = 0
     /// 1.0.0-beta.23: serrilhado das bordas (nível 0–1; 0 = desligado) e semente do jitter de linhas/colunas.
     var jitterLevel: Double = 0
     var jitterSeed: UInt64 = 0
@@ -710,6 +783,9 @@ struct StoryParams: Equatable {
         let lineLevelU = unit(), jitterLevelU = unit(), aberrationLevelU = unit(), bloomLevelU = unit()
         let aberrationAngleU = unit(), blurAngleU = unit()
         let jitterSeed = rng.next()
+        // 1.0.0-beta.25: sorteios do Tom, também no fim
+        let lineAngleU = unit()
+        let lineSeed = rng.next()
         /// 70% a 100% do nível escolhido.
         func level(_ percent: Double, _ u: Double) -> Double { percent / 100 * (0.7 + 0.3 * u) }
 
@@ -768,7 +844,18 @@ struct StoryParams: Equatable {
         if a.vignette { p.vignette = vig }
         if t.lines, t.lineOpacityPercent > 0 {
             // linhas variam pouco entre imagens (90% a 100% do nível): têm que aparecer em todas
-            p.lineOpacity = StoryTexture.lineAlpha(level: t.lineOpacityPercent / 100 * (0.9 + 0.1 * lineLevelU))
+            let lineLevel = t.lineOpacityPercent / 100 * (0.9 + 0.1 * lineLevelU)
+            p.lineStyle = t.lineStyle
+            switch t.lineStyle {
+            case .ink:
+                p.lineOpacity = StoryTexture.lineAlpha(level: lineLevel)
+            case .tone:
+                p.lineOpacity = StoryTexture.toneAmplitude(level: lineLevel)
+                // ±3° por imagem em volta do ângulo escolhido
+                p.lineAngle = min(max(t.lineAngle + (lineAngleU * 2 - 1) * 3, StoryTexture.angleRange.lowerBound), StoryTexture.angleRange.upperBound)
+                p.lineIrregularity = min(max(t.lineIrregularity / 100, 0), 1)
+                p.lineSeed = lineSeed
+            }
             p.lineSpacing = max(4, Int(t.lineSpacing))
             p.lineThickness = max(2, min(Int(t.lineThickness), p.lineSpacing - 2))
             p.lineBlend = t.lineBlend
@@ -867,7 +954,12 @@ struct StoryParams: Equatable {
             case .slash: dir = "/"
             default: dir = "X"
             }
-            parts.append("linhas \(dir) \(lineSpacing)px/\(lineThickness)px \(lineBlend.label.lowercased()) " + String(format: "%.0f%%", lineOpacity * 100))
+            switch lineStyle {
+            case .ink:
+                parts.append("linhas \(dir) \(lineSpacing)px/\(lineThickness)px \(lineBlend.label.lowercased()) " + String(format: "%.0f%%", lineOpacity * 100))
+            case .tone:
+                parts.append("linhas no tom \(dir) " + String(format: "%.0f° %dpx/%dpx ±%.0f%%", lineAngle, lineSpacing, lineThickness, lineOpacity * 100))
+            }
         }
         if jitterLevel > 0 { parts.append(String(format: "serrilhado %.0f%%", jitterLevel * 100)) }
         if aberrationDX != 0 || aberrationDY != 0 { parts.append("aberração RGB \(aberrationDX),\(aberrationDY)px") }

@@ -65,6 +65,10 @@ enum StoryTextureEffects {
     /// No X, as duas diagonais entram em sequência (cada uma com a própria fase e `lineCrossBalance` da opacidade).
     static func applyLines(_ px: inout [UInt8], width W: Int, height H: Int, params p: StoryParams) {
         guard p.lineOpacity > 0, W > 0, H > 0, px.count >= W * H * 4 else { return }
+        if p.lineStyle == .tone {
+            applyToneLines(&px, width: W, height: H, params: p)
+            return
+        }
         let s = min(max(p.lineSpacing, 4), 64)
         let t = min(max(p.lineThickness, 1), s - 2)
         let h = StoryTexture.lineHighlightWidth(spacing: s, thickness: t)
@@ -104,6 +108,132 @@ enum StoryTextureEffects {
                             if kf == s { kf = 0 }
                             o += 4
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Linhas no tom (beta.25)
+
+    /// Número de 0 a 1 tirado de (a, b, semente): sempre o mesmo para os mesmos valores.
+    @inline(__always)
+    static func hash01(_ a: Int, _ b: Int, _ seed: UInt64) -> Double {
+        var h = seed &+ UInt64(bitPattern: Int64(a)) &* 0x9E37_79B9_7F4A_7C15 &+ UInt64(bitPattern: Int64(b)) &* 0xC2B2_AE3D_27D4_EB4F
+        h ^= h >> 30
+        h = h &* 0xBF58_476D_1CE4_E5B9
+        h ^= h >> 27
+        h = h &* 0x94D0_49BB_1331_11EB
+        h ^= h >> 31
+        return Double(h >> 11) * (1.0 / 9_007_199_254_740_992.0)
+    }
+
+    @inline(__always)
+    static func smoothstep(_ e0: Double, _ e1: Double, _ x: Double) -> Double {
+        let t = min(max((x - e0) / (e1 - e0), 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    /// Força do risco num trecho de uma linha (0 = falha). Sem irregularidade, sempre 1.
+    /// Com irregularidade `r` (0 a 1): até 30% dos trechos somem e a força dos outros varia entre 1 − 0,7·r e 1.
+    @inline(__always)
+    static func segmentStrength(line: Int, segment: Int, irregularity r: Double, seed: UInt64) -> Double {
+        guard r > 0 else { return 1 }
+        if hash01(line, segment, seed) < 0.3 * r { return 0 }
+        return 1 - r * 0.7 * hash01(line, segment, seed ^ 0x5DEE_CE66)
+    }
+
+    /// Perfil de uma linha no Tom: quanto o brilho muda a `d` px do centro (−1 = escurece tudo o que a força permite,
+    /// +0,5 = clareia metade disso). Miolo escuro de `thickness` px com 1 px de borda suave e, colado de um lado,
+    /// um brilho fraco de ~2 px. Nada de degrau duro: é isso que tira a cara de "padrão digital".
+    @inline(__always)
+    static func toneProfile(distance d: Double, thickness t: Double) -> Double {
+        let half = t / 2
+        let dark = 1 - smoothstep(half - 0.5, half + 0.5, abs(d))
+        let glow = max(0, 1 - abs(d - (half + 1)) / 1.2)
+        return -dark + 0.5 * glow
+    }
+
+    /// Quanto da linha entra num pixel com luminância `luma` (0 a 1): as áreas muito claras (texto branco, luzes) quase não recebem.
+    @inline(__always)
+    static func toneProtection(luma: Double) -> Double { 1 - smoothstep(0.72, 0.97, luma) }
+
+    /// Multiplica R, G e B pelo mesmo fator (a cor fica a mesma, só o brilho muda). Para clarear, o fator para antes
+    /// de o canal mais forte estourar — senão a proporção entre os canais, e com ela a cor, mudaria.
+    @inline(__always)
+    static func toneScale(r: UInt8, g: UInt8, b: UInt8, factor: Double) -> (UInt8, UInt8, UInt8) {
+        var f = max(factor, 0)
+        if f > 1 {
+            let m = Double(max(r, max(g, b)))
+            if m > 0 { f = min(f, 255 / m) }
+        }
+        func c(_ v: UInt8) -> UInt8 { UInt8(min(max((Double(v) * f).rounded(), 0), 255)) }
+        return (c(r), c(g), c(b))
+    }
+
+    /// Linhas no tom da imagem. Cada camada é uma família de linhas paralelas com ângulo `lineAngle` (graus a partir da horizontal),
+    /// espaçadas `lineSpacing` px (distância de uma linha à outra) e com miolo de `lineThickness` px. Com irregularidade, cada linha
+    /// anda um pouco para o lado e é feita de trechos de ~36 px com força diferente (alguns somem), como chuva ou filme riscado.
+    /// `lineOpacity` é a variação máxima de brilho no centro da linha. No X as duas camadas entram em sequência.
+    static func applyToneLines(_ px: inout [UInt8], width W: Int, height H: Int, params p: StoryParams) {
+        guard p.lineOpacity > 0, W > 0, H > 0, px.count >= W * H * 4 else { return }
+        let s = Double(min(max(p.lineSpacing, 4), 64))
+        let t = Double(min(max(p.lineThickness, 1), Int(s) - 2))
+        let r = min(max(p.lineIrregularity.isFinite ? p.lineIrregularity : 0, 0), 1)
+        let theta = min(max(p.lineAngle.isFinite ? p.lineAngle : 45, 10), 80) * Double.pi / 180
+        let sn = sin(theta), cs = cos(theta)
+        let useBack = p.lineDirection != .slash
+        let useFwd = p.lineDirection != .backslash
+        let cross = useBack && useFwd
+        let amp = min(max(p.lineOpacity, 0), 0.6) * (cross ? StoryTexture.lineCrossBalance : 1)
+        // quanto cada linha pode andar para o lado sem encostar na vizinha
+        let maxShift = r * max(0, (s - t - 2) / 2)
+        let reach = t / 2 + 2.3
+        let segLen = StoryTexture.toneSegmentLength
+        var layers: [(slash: Bool, phase: Double, seed: UInt64)] = []
+        if useBack { layers.append((slash: false, phase: Double(p.linePhase), seed: p.lineSeed)) }
+        if useFwd { layers.append((slash: true, phase: Double(cross ? p.linePhase2 : p.linePhase), seed: cross ? p.lineSeed ^ 0x9E37_79B9_7F4A_7C15 : p.lineSeed)) }
+        px.withUnsafeMutableBufferPointer { buf in
+            for layer in layers {
+                // n: posição perpendicular às linhas (px) · u: posição ao longo da linha (px), com y de cima para baixo
+                // \ : n = x·sen − y·cos, u = x·cos + y·sen  ·  / : n = x·sen + y·cos, u = x·cos − y·sen
+                let ny = layer.slash ? cs : -cs
+                let uy = layer.slash ? -sn : sn
+                for y in 0..<H {
+                    var n = Double(y) * ny + layer.phase
+                    var u = Double(y) * uy
+                    var o = y * W * 4
+                    for _ in 0..<W {
+                        let q = n / s
+                        let line = Int(q.rounded(.down))
+                        let shift = maxShift > 0 ? (hash01(line, -7, layer.seed) * 2 - 1) * maxShift : 0
+                        let d = (q - Double(line)) * s - s / 2 - shift
+                        if abs(d) <= reach {
+                            let profile = toneProfile(distance: d, thickness: t)
+                            var strength = 1.0
+                            if r > 0 {
+                                let a = u / segLen + hash01(line, -3, layer.seed) * 8
+                                let j = Int(a.rounded(.down))
+                                let f = smoothstep(0, 1, a - Double(j))
+                                let s0 = segmentStrength(line: line, segment: j, irregularity: r, seed: layer.seed)
+                                let s1 = segmentStrength(line: line, segment: j + 1, irregularity: r, seed: layer.seed)
+                                strength = s0 + (s1 - s0) * f
+                            }
+                            if profile != 0 && strength > 0 {
+                                let R = buf[o], G = buf[o + 1], B = buf[o + 2]
+                                let luma = (0.299 * Double(R) + 0.587 * Double(G) + 0.114 * Double(B)) / 255
+                                let k = amp * profile * strength * toneProtection(luma: luma)
+                                if k != 0 {
+                                    let out = toneScale(r: R, g: G, b: B, factor: 1 + k)
+                                    buf[o] = out.0
+                                    buf[o + 1] = out.1
+                                    buf[o + 2] = out.2
+                                }
+                            }
+                        }
+                        n += sn
+                        u += cs
+                        o += 4
                     }
                 }
             }
