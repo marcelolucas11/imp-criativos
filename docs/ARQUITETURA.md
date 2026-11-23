@@ -55,6 +55,14 @@ overlay/soft-light, `CIDissolveTransition` na opacidade) → ruído (`CILinearLi
 → buffer RGBX novo → JPEG (`tj3Set` qualidade, `TJPARAM_SUBSAMP`, `TJPARAM_PROGRESSIVE`, `tj3SetICCProfile` sRGB) ou PNG
 (ImageIO + `cleanPNG`, que deixa só blocos de imagem e cor).
 
+**beta.22:** níveis `normal` e `aggressive` (`StoryAdjustments.normal/.aggressive`, com mínimos por etapa), e quatro etapas novas:
+- micro-perspectiva: `CIPerspectiveTransformWithExtent` sobre a imagem ampliada em 1+2m, com bordas replicadas e 90% da folga;
+- temperatura: `CITemperatureAndTint`, com `targetNeutral` = 6500 − K, de modo que K positivo deixa a imagem mais quente;
+- riscos diagonais: ladrilho p×p em float com `CIAffineTile` e `samplingNearest`, linear light; `StoryParams.diagonalSign` dá −1/0/+1 com média zero;
+- vinheta: `CIRadialGradient` de 0,5 a 0,5 + v/2, em linear light.
+
+Também entrou `StoryOptions.versionsPerImage` (1–10). `StoryVersions.seed(seed, version:)` usa a versão 1 = semente da imagem, que é a do preview. Os sorteios novos ficam no fim da sequência, então Leve e Moderado dão o mesmo resultado da beta.21. `StoryAdjustments` tem leitura tolerante, para que os ajustes salvos antes continuem valendo.
+
 Cada imagem recebe a semente ao entrar na lista: o preview e o arquivo final saem da mesma semente; "Novo sorteio" troca a semente.
 Os sorteios são feitos sempre na mesma ordem e só depois zerados pelas etapas desligadas, então desligar uma etapa não muda as outras.
 

@@ -47,7 +47,14 @@ Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O
 - Arraste até **100 imagens** (JPG, PNG, WebP, HEIC) ou uma pasta; miniaturas com status, remover item ou limpar tudo.
 - **Enquadramento 9:16 (1080×1920):** Preencher (corta o excesso), Fundo desfocado (imagem inteira + cópia desfocada em cima e embaixo) ou Cor sólida (preto, cor dominante ou cor escolhida).
 - **Limpeza de metadados:** cada imagem é redesenhada do zero; EXIF, IPTC, XMP, GPS, comentários e perfis antigos não passam. O arquivo sai só com perfil sRGB.
-- **Variações sutis sorteadas por imagem** (Leve, Moderado ou Personalizado): micro-recorte 0,5–1,5% e rotação até ±0,8°, brilho/contraste ±2%, saturação ±3%, micro-ruído ±2 a ±4 níveis, deslocamento de 1px no canal R ou B, granulação de filme 1–3% (overlay/soft-light), Unsharp Mask leve ou suavização de 0,2px, espelhar (desligado de fábrica; só para imagens sem texto).
+- **Variações sorteadas por imagem**, em cinco níveis: Leve, Moderado, Normal, Agressivo e Personalizado. Os ajustes:
+  - micro-recorte e rotação (Moderado: 0,5–1,5% e ±0,8°; Agressivo: até 5% e ±2°) e micro-perspectiva;
+  - brilho, contraste e saturação, e temperatura de cor;
+  - micro-ruído e **riscos diagonais pixel a pixel** (uma linha escurece, a seguinte clareia, a outra mantém o tom original);
+  - deslocamento de 1px ou 2px no canal R ou B e granulação de filme;
+  - vinheta e Unsharp Mask leve ou suavização;
+  - espelhar (desligado de fábrica; só para imagens sem texto).
+- **Versões por imagem (1 a 10):** cada versão sai com um sorteio diferente (`story_001_v2_a8f3k.jpg`).
 - **Gravação:** JPEG pela libjpeg-turbo com qualidade 88–93, baseline ou progressivo e subamostragem 4:2:0 ou 4:4:4 sorteados; ou PNG. Nomes `story_001_a8f3k.jpg` (ou só sequenciais).
 - **Antes / Depois** da imagem selecionada com as configurações atuais (é exatamente o arquivo que vai sair) e "Novo sorteio".
 - **Fila** com 4 imagens por vez, barra "X de Y", status por arquivo e Cancelar. Salva numa pasta `stories_data_hora` dentro da pasta escolhida e oferece **Baixar Tudo (.ZIP)**.

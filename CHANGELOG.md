@@ -1,5 +1,27 @@
 # Histórico de versões
 
+## [1.0.0-beta.22] — 2026-11-23
+
+**Otimizador em Lote: níveis Normal e Agressivo, riscos diagonais e versões por imagem**
+
+- **Novos níveis de intensidade**, agora em cinco: Leve, Moderado, **Normal**, **Agressivo** e Personalizado. Embaixo do seletor aparece o que cada nível faz, e o Agressivo vem com aviso.
+  - **Normal:** recorte de 1% a 3%, rotação até ±1,5°, brilho e contraste ±4%, saturação ±6%, ruído ±3 a ±6 e granulação de 2% a 5%, com as etapas novas ligadas.
+  - **Agressivo:** recorte de 2% a 5%, rotação até ±2°, brilho e contraste ±7%, saturação ±10%, ruído ±5 a ±8, deslocamento de canal de até 2px e granulação de 4% a 8%. A diferença fica visível, mas a peça continua reconhecível.
+- **Riscos diagonais pixel a pixel:** uma linha escurece, a seguinte clareia e a outra mantém o tom original. Às vezes o padrão é de 4 linhas, com escurece, mantém, clareia, mantém. A direção (\ ou /), o espaçamento e a intensidade são sorteados por imagem. A média do padrão é zero, então o tom geral da imagem não muda. Vai de ±2 a ±5 níveis no Normal e de ±5 a ±10 no Agressivo.
+- **Micro-perspectiva:** cada canto da imagem anda um pouco, até ±0,6% no Normal e ±1,5% no Agressivo, sem deixar borda vazia.
+- **Temperatura de cor:** a imagem fica um pouco mais quente ou mais fria, até ±300K no Normal e ±650K no Agressivo.
+- **Vinheta:** os cantos ficam um pouco mais escuros ou mais claros e o centro não muda, até ±5% no Normal e ±12% no Agressivo.
+- **Versões por imagem (1 a 10):** cada imagem pode gerar várias versões, cada uma com um sorteio diferente (`story_001_v1_…`, `story_001_v2_…`). O preview tem um seletor para ver cada versão, e o progresso conta os arquivos.
+- O **Personalizado** ganhou chave e limite para cada etapa nova, e os limites dos sliders agora vão até o Agressivo. Os ajustes salvos nas versões anteriores continuam valendo.
+- Os níveis Leve e Moderado não mudaram. A mesma imagem com a mesma semente sai igual à da beta.21.
+- **Testes automáticos novos:**
+  - os riscos ficam só em base −N, base e base +N, constantes ao longo da diagonal e sem mudar a média;
+  - o sinal + da temperatura deixa a imagem mais quente;
+  - a vinheta muda os cantos e não o centro;
+  - com tudo do Agressivo no extremo, não sobra canto vazio;
+  - cada nível respeita os próprios limites;
+  - as versões têm sementes e nomes diferentes.
+
 ## [1.0.0-beta.21] — 2026-11-23
 
 **Nova aba: Otimizador em Lote (Stories 9:16) — 100% no Mac, sem IA**
