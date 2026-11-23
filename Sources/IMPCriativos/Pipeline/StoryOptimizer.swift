@@ -243,7 +243,8 @@ enum StoryOptimizer {
     /// JPEG pela libjpeg-turbo: qualidade, baseline/progressivo e subamostragem 4:2:0/4:4:4 do sorteio,
     /// com perfil sRGB e nenhum outro metadado (sem EXIF, XMP, IPTC nem comentário).
     static func encodeJPEG(_ raster: Raster, params: StoryParams) throws -> Data {
-        guard let handle = tj3Init(tj(TJINIT_COMPRESS.rawValue)) else { throw Failure.encode("libjpeg-turbo não iniciou") }
+        // tj3Init é uma macro em C (o Swift não enxerga); ela chama tj3InitVersion com a versão do cabeçalho
+        guard let handle = tj3InitVersion(tj(TJINIT_COMPRESS.rawValue), tj(TURBOJPEG_VERSION_NUMBER)) else { throw Failure.encode("libjpeg-turbo não iniciou") }
         defer { tj3Destroy(handle) }
         func check(_ code: Int32) throws {
             if code != 0 { throw Failure.encode(String(cString: tj3GetErrorStr(handle))) }
