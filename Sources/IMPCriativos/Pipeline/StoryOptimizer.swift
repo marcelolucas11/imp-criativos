@@ -276,7 +276,29 @@ enum StoryOptimizer {
         }
         CGImageDestinationAddImage(dst, raster.image, nil)
         guard CGImageDestinationFinalize(dst) else { throw Failure.encode("PNG não finalizou") }
-        return data as Data
+        return cleanPNG(data as Data)
+    }
+
+    /// Blocos do PNG que ficam: imagem e cor. Qualquer outro (eXIf, textos, data, etc.) sai do arquivo.
+    static let keptPNGChunks: Set<String> = ["IHDR", "PLTE", "IDAT", "IEND", "iCCP", "sRGB", "gAMA", "cHRM"]
+
+    /// Remove do PNG todo bloco que não seja de imagem ou de cor (o ImageIO pode gravar eXIf com as dimensões).
+    static func cleanPNG(_ data: Data) -> Data {
+        let b = [UInt8](data)
+        let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        guard b.count > 8, Array(b[0..<8]) == signature else { return data }
+        var out = signature
+        var i = 8
+        while i + 12 <= b.count {
+            let length = Int(b[i]) << 24 | Int(b[i + 1]) << 16 | Int(b[i + 2]) << 8 | Int(b[i + 3])
+            let end = i + 12 + length
+            guard length >= 0, end <= b.count else { return data }
+            let type = String(decoding: b[(i + 4)..<(i + 8)], as: UTF8.self)
+            if keptPNGChunks.contains(type) { out += b[i..<end] }
+            i = end
+            if type == "IEND" { break }
+        }
+        return Data(out)
     }
 
     /// Processa uma imagem do lote e grava em `output`. Devolve o tamanho do arquivo em bytes.

@@ -335,8 +335,32 @@ final class StoryOptimizerImageTests: XCTestCase {
         let decoded = try XCTUnwrap(decode(out))
         XCTAssertEqual(decoded.image.width, 1080)
         XCTAssertEqual(decoded.image.height, 1920)
-        let props = CGImageSourceCopyPropertiesAtIndex(CGImageSourceCreateWithURL(out as CFURL, nil)!, 0, nil) as? [CFString: Any]
-        XCTAssertNil(props?[kCGImagePropertyExifDictionary])
+        // confere os blocos do arquivo (o leitor da Apple inventa um {Exif} com as dimensões, então lemos os bytes)
+        let bytes = [UInt8](try Data(contentsOf: out))
+        var types: [String] = []
+        var i = 8
+        while i + 12 <= bytes.count {
+            let length = Int(bytes[i]) << 24 | Int(bytes[i + 1]) << 16 | Int(bytes[i + 2]) << 8 | Int(bytes[i + 3])
+            types.append(String(decoding: bytes[(i + 4)..<(i + 8)], as: UTF8.self))
+            i += 12 + length
+        }
+        print("PNG blocos: \(types)")
+        XCTAssertEqual(types.first, "IHDR")
+        XCTAssertEqual(types.last, "IEND")
+        XCTAssertTrue(Set(types).isSubset(of: StoryOptimizer.keptPNGChunks), "só blocos de imagem e cor: \(types)")
+        XCTAssertFalse(types.contains("eXIf"))
+    }
+
+    func testCleanPNGDropsTextAndExifChunks() {
+        func chunk(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let n = payload.count
+            return [UInt8(n >> 24 & 255), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] + Array(type.utf8) + payload + [0, 0, 0, 0]
+        }
+        let sig: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        let dirty = sig + chunk("IHDR", Array(repeating: 1, count: 13)) + chunk("eXIf", Array("SecretCam".utf8))
+            + chunk("tEXt", Array("Software Spy".utf8)) + chunk("IDAT", [9, 9, 9]) + chunk("IEND", [])
+        let clean = [UInt8](StoryOptimizer.cleanPNG(Data(dirty)))
+        XCTAssertEqual(clean, sig + chunk("IHDR", Array(repeating: 1, count: 13)) + chunk("IDAT", [9, 9, 9]) + chunk("IEND", []))
     }
 
     /// Amostras para conferir a olho (guardadas pelo GitHub Actions) e tempo por imagem.
@@ -370,6 +394,29 @@ final class StoryOptimizerImageTests: XCTestCase {
         let zoomed = try XCTUnwrap(StoryOptimizer.context.createCGImage(crop, from: CGRect(x: 0, y: 0, width: 1080, height: 1920)))
         _ = write(zoomed, "zoom.png")
         try? FileManager.default.copyItem(at: tmp.appendingPathComponent("zoom.png"), to: Self.samples.appendingPathComponent("9-zoom-4x-moderado.png"))
+        // folha de contato (3×2) em base64 no log, para conferir sem baixar o artefato
+        let outputs = StoryFit.allCases.enumerated().flatMap { i, fit in
+            [StoryIntensity.light, .moderate].map { Self.samples.appendingPathComponent("\(i + 1)-\(fit.rawValue)-\($0.rawValue).jpg") }
+        }
+        let tileW = 360, tileH = 640
+        let sheet = makeImage(tileW * 2, tileH * 3) { ctx in
+            ctx.interpolationQuality = .high
+            for (n, url) in outputs.enumerated() {
+                guard let img = decode(url)?.image else { continue }
+                let col = n % 2, row = 2 - n / 2
+                ctx.draw(img, in: CGRect(x: col * tileW, y: row * tileH, width: tileW, height: tileH))
+            }
+        }
+        for (name, img) in [("folha", sheet), ("zoom", zoomed)] {
+            let url = write(img, "\(name).jpg", type: .jpeg, properties: [kCGImageDestinationLossyCompressionQuality: name == "zoom" ? 0.95 : 0.85])
+            let b64 = try Data(contentsOf: url).base64EncodedString()
+            var i = b64.startIndex
+            while i < b64.endIndex {
+                let j = b64.index(i, offsetBy: 2000, limitedBy: b64.endIndex) ?? b64.endIndex
+                print("SAMPLEB64 \(name) \(b64[i..<j])")
+                i = j
+            }
+        }
         let avg = timings.reduce(0, +) / Double(timings.count)
         print("Otimizador: \(String(format: "%.3f", avg)) s por imagem (entrada 4000×3000, \(timings.count) amostras)")
         XCTAssertLessThan(avg, 5, "uma imagem não pode levar mais que alguns segundos")
