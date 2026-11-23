@@ -21,7 +21,7 @@
   - **Re-randomizar Preview:** sorteia outros valores para a imagem (a nova semente também vale no lote).
   - O **Antes** pode ser o **original enquadrado** (sem nenhuma variação) ou **sem as texturas** (tudo igual ao arquivo final, menos as texturas), com a mesma geometria para comparar pixel a pixel.
 - O resumo do Histórico e o do preview passam a listar as texturas usadas.
-- **Desempenho:** linhas e serrilhado são passadas inteiras sobre o buffer de 1080×1920 (dezenas de ms por imagem); aberração e bloom rodam no Core Image, na placa de vídeo. Tudo continua 100% no Mac, sem rede e sem IA.
+- **Desempenho:** linhas e serrilhado são passadas inteiras sobre o buffer de 1080×1920 (medido em Release: cerca de 30 ms o serrilhado e 4 ms as linhas, por imagem); aberração e bloom rodam no Core Image, na placa de vídeo. Tudo continua 100% no Mac, sem rede e sem IA.
 - **Testes automáticos novos:**
   - texturas desligadas não mudam o sorteio das outras etapas, e as opções salvas antes continuam lendo;
   - cada preset liga o que promete; a direção aleatória sorteia as três; a aberração fica entre 1 e 6px;
