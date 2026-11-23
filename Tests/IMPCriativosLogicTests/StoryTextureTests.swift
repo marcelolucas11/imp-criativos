@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import CoreText
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
@@ -713,11 +714,30 @@ final class StoryTextureTests: XCTestCase {
 
     /// Amostras só das linhas: 5 níveis do slider × 3 direções, em 1:1, e uma folha ampliada para conferir pixel a pixel.
     func testLineLevelsAndDirectionsSamples() throws {
-        let base = try StoryOptimizer.rasterize(compose(creative(), StoryParams()))
+        // criativo 1080×1920 com título e subtítulo de verdade (texto branco sobre fundo escuro, e um bloco claro) para ver a legibilidade
+        let artwork = makeImage(1080, 1920) { ctx in
+            let colors = [CGColor(srgbRed: 0.45, green: 0.05, blue: 0.6, alpha: 1), CGColor(srgbRed: 0.05, green: 0.1, blue: 0.35, alpha: 1)] as CFArray
+            let gradient = CGGradient(colorsSpace: StoryOptimizer.srgb, colors: colors, locations: [0, 1])!
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 1920), end: CGPoint(x: 1080, y: 0), options: [])
+            func text(_ string: String, size: CGFloat, baselineFromTop: CGFloat, x: CGFloat, color: CGColor) {
+                let font = CTFontCreateWithName("Helvetica-Bold" as CFString, size, nil)
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color]
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
+                ctx.textPosition = CGPoint(x: x, y: 1920 - baselineFromTop)
+                CTLineDraw(line, ctx)
+            }
+            let white = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+            text("SORTEIO", size: 130, baselineFromTop: 270, x: 50, color: white)
+            text("R$ 50.000 NO PIX", size: 64, baselineFromTop: 360, x: 50, color: CGColor(srgbRed: 1, green: 0.85, blue: 0.2, alpha: 1))
+            ctx.setFillColor(white)
+            ctx.fill(CGRect(x: 50, y: 1920 - 760, width: 980, height: 250))
+            text("GARANTA SEU NÚMERO", size: 70, baselineFromTop: 660, x: 80, color: CGColor(srgbRed: 0.1, green: 0.05, blue: 0.3, alpha: 1))
+        }
+        let base = try StoryOptimizer.rasterize(compose(artwork, StoryParams()))
         let levels: [Double] = [0.10, 0.25, 0.50, 0.80, 1.0]
         let directions: [StoryLineDirection] = [.backslash, .slash, .cross]
-        let tile = CGSize(width: 270, height: 165)
-        let crop = CGRect(x: 60, y: 620, width: tile.width, height: tile.height) // pega as barras de texto, o fundo escuro e o início do círculo
+        let tile = CGSize(width: 270, height: 200)
+        let crop = CGRect(x: 45, y: 170, width: tile.width, height: tile.height) // título branco, subtítulo amarelo e fundo escuro
         func lined(_ direction: StoryLineDirection, _ level: Double) throws -> CGImage {
             var p = StoryParams()
             p.lineOpacity = StoryTexture.lineAlpha(level: level)
@@ -741,7 +761,7 @@ final class StoryTextureTests: XCTestCase {
             }
         }
         let zoomPicks: [(StoryLineDirection, Double)] = [(.backslash, 0.5), (.slash, 0.5), (.cross, 0.5), (.cross, 1.0)]
-        let zoomCrop = CGRect(x: 40, y: 20, width: 90, height: 60)
+        let zoomCrop = CGRect(x: 15, y: 10, width: 90, height: 60)
         let zoomImages = try zoomPicks.map { try XCTUnwrap(lined($0.0, $0.1).cropping(to: zoomCrop)) }
         let zoom = makeImage(1080, 720) { ctx in
             ctx.interpolationQuality = .none
@@ -750,7 +770,21 @@ final class StoryTextureTests: XCTestCase {
                 ctx.draw(img, in: CGRect(x: col * 540, y: row * 360, width: 540, height: 360))
             }
         }
-        for (name, img) in [("linhas-niveis", sheet), ("linhas-zoom-6x", zoom)] {
+        // o bloco claro com texto escuro: aqui a faixa escura é que aparece, e o texto não pode se perder
+        let lightCrop = CGRect(x: 60, y: 570, width: 270, height: 130)
+        func linedLight(_ direction: StoryLineDirection, _ level: Double) throws -> CGImage {
+            var p = StoryParams()
+            p.lineOpacity = StoryTexture.lineAlpha(level: level)
+            p.lineSpacing = 8; p.lineThickness = 3; p.lineDirection = direction; p.lineBlend = .hardLight
+            p.linePhase = 2; p.linePhase2 = 6
+            return try XCTUnwrap(StoryOptimizer.applyTexture(base, params: p).image.cropping(to: lightCrop))
+        }
+        let lightRow = try levels.map { try linedLight(.cross, $0) }
+        let lightSheet = makeImage(Int(lightCrop.width) * levels.count, Int(lightCrop.height)) { ctx in
+            ctx.interpolationQuality = .none
+            for (c, img) in lightRow.enumerated() { ctx.draw(img, in: CGRect(x: CGFloat(c) * lightCrop.width, y: 0, width: lightCrop.width, height: lightCrop.height)) }
+        }
+        for (name, img) in [("linhas-niveis", sheet), ("linhas-zoom-6x", zoom), ("linhas-bloco-claro", lightSheet)] {
             let url = write(img, "\(name).jpg", type: .jpeg, quality: 0.95)
             try? FileManager.default.copyItem(at: url, to: Self.samples.appendingPathComponent("\(name).jpg"))
             try printBase64(name, url)
