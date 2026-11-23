@@ -82,9 +82,12 @@ final class StoryTextureTests: XCTestCase {
             o.texturePreset = .subtle
             let s = StoryParams.sample(o, seed: UInt64(seed))
             XCTAssertGreaterThan(s.lineOpacity, 0)
-            XCTAssertLessThanOrEqual(s.lineOpacity, StoryTexture.lineAlpha(level: 0.2) + 1e-9, "linhas leves")
-            XCTAssertEqual(s.lineSpacing, 12)
+            XCTAssertEqual(s.lineStyle, .tone, "Sutil usa linhas no tom (mantêm a cor)")
+            XCTAssertLessThanOrEqual(s.lineOpacity, StoryTexture.toneAmplitude(level: 0.3) + 1e-9, "linhas leves")
+            XCTAssertEqual(s.lineSpacing, 10)
             XCTAssertEqual(s.lineThickness, 2)
+            XCTAssertEqual(s.lineAngle, 55, accuracy: 3.0001)
+            XCTAssertEqual(s.lineIrregularity, 0.6, accuracy: 1e-9)
             XCTAssertGreaterThan(s.jitterLevel, 0)
             XCTAssertLessThanOrEqual(s.jitterLevel, 0.15 + 1e-9, "serrilhado mínimo")
             XCTAssertTrue(s.aberrationDX != 0 || s.aberrationDY != 0)
@@ -93,9 +96,10 @@ final class StoryTextureTests: XCTestCase {
 
             o.texturePreset = .balanced
             let b = StoryParams.sample(o, seed: UInt64(seed))
-            XCTAssertGreaterThanOrEqual(b.lineOpacity, StoryTexture.lineAlpha(level: 0.45) - 1e-9, "50%: bem marcado")
-            XCTAssertLessThanOrEqual(b.lineOpacity, StoryTexture.lineAlpha(level: 0.5) + 1e-9)
-            XCTAssertEqual(b.lineSpacing, 8)
+            XCTAssertEqual(b.lineStyle, .tone)
+            XCTAssertGreaterThanOrEqual(b.lineOpacity, StoryTexture.toneAmplitude(level: 0.54) - 1e-9, "60%: visível")
+            XCTAssertLessThanOrEqual(b.lineOpacity, StoryTexture.toneAmplitude(level: 0.6) + 1e-9)
+            XCTAssertEqual(b.lineSpacing, 9)
             XCTAssertEqual(b.lineThickness, 3)
             XCTAssertGreaterThanOrEqual(b.jitterLevel, 0.45 * 0.7 - 1e-9)
             XCTAssertLessThanOrEqual(b.jitterLevel, 0.45 + 1e-9)
@@ -105,6 +109,7 @@ final class StoryTextureTests: XCTestCase {
             o.texturePreset = .intense
             let i = StoryParams.sample(o, seed: UInt64(seed))
             XCTAssertEqual(i.lineDirection, .cross)
+            XCTAssertEqual(i.lineStyle, .ink, "Intenso continua em gravura preto e branco")
             XCTAssertEqual(i.lineThickness, 4)
             XCTAssertEqual(i.lineSpacing, 8)
             XCTAssertGreaterThanOrEqual(i.bloomLevel, 0.7 * 0.7 - 1e-9)
@@ -196,8 +201,15 @@ final class StoryTextureTests: XCTestCase {
         XCTAssertEqual(t.clamped().lineSpacing, 18, "espaçamento máximo de 18px")
         t.lineSpacing = 8
         XCTAssertEqual(t.clamped().lineThickness, 6, "sempre sobram 2px: espessura ≤ espaçamento − 2")
-        XCTAssertEqual(StoryTexture().lineSpacing, 8)
-        XCTAssertEqual(StoryTexture().lineThickness, 3)
+        XCTAssertEqual(StoryTexture().lineSpacing, 10)
+        XCTAssertEqual(StoryTexture().lineThickness, 2)
+        XCTAssertEqual(StoryTexture().lineStyle, .tone, "linha nova começa no tom")
+        t.lineAngle = 5
+        t.lineIrregularity = 300
+        XCTAssertEqual(t.clamped().lineAngle, 30, "ângulo de 30° a 75°")
+        XCTAssertEqual(t.clamped().lineIrregularity, 100)
+        t.lineAngle = 120
+        XCTAssertEqual(t.clamped().lineAngle, 75)
         var o = textureOptions
         o.texturePreset = .custom
         o.customTexture = t
@@ -246,6 +258,11 @@ final class StoryTextureTests: XCTestCase {
         let p = try JSONDecoder().decode(StoryOptions.self, from: partial)
         XCTAssertEqual(p.texturePreset, .balanced)
         XCTAssertEqual(p.customTexture.lineSpacing, 9)
+        XCTAssertEqual(p.customTexture.lineStyle, .ink, "opções salvas antes da beta.25 continuam em gravura")
+        n.customTexture.lineStyle = .tone
+        n.customTexture.lineAngle = 62
+        n.customTexture.lineIrregularity = 35
+        XCTAssertEqual(try JSONDecoder().decode(StoryOptions.self, from: JSONEncoder().encode(n)), n)
         let oldBlend = #"{"customTexture":{"lines":true,"lineBlend":"softLight"}}"#.data(using: .utf8)!
         let q = try JSONDecoder().decode(StoryOptions.self, from: oldBlend)
         XCTAssertEqual(q.customTexture.lineBlend, .hardLight, "modo removido (Soft-light) volta para Hard-light")
@@ -385,7 +402,7 @@ final class StoryTextureTests: XCTestCase {
         var phases = Set<Int>()
         for seed in 1...60 { phases.insert(StoryParams.sample(o, seed: UInt64(seed)).linePhase) }
         XCTAssertGreaterThanOrEqual(phases.count, 5, "a fase muda de imagem para imagem: \(phases.sorted())")
-        XCTAssertTrue(phases.allSatisfy { (0..<8).contains($0) })
+        XCTAssertTrue(phases.allSatisfy { (0..<9).contains($0) })
         o.texturePreset = .intense
         var phases2 = Set<Int>()
         for seed in 1...60 {
@@ -394,6 +411,170 @@ final class StoryTextureTests: XCTestCase {
             phases2.insert(p.linePhase2)
         }
         XCTAssertGreaterThanOrEqual(phases2.count, 5, "no X a segunda diagonal também muda")
+    }
+
+    // MARK: - Linhas no tom (beta.25)
+
+    private func toneParams(_ direction: StoryLineDirection, amplitude: Double = 0.3, angle: Double = 55, irregularity: Double = 0) -> StoryParams {
+        var p = StoryParams()
+        p.lineStyle = .tone
+        p.lineOpacity = amplitude
+        p.lineSpacing = 10
+        p.lineThickness = 3
+        p.lineDirection = direction
+        p.lineAngle = angle
+        p.lineIrregularity = irregularity
+        p.linePhase = 2
+        p.linePhase2 = 7
+        p.lineSeed = 42
+        return p
+    }
+
+    private func coloured(_ W: Int, _ H: Int, _ r: UInt8, _ g: UInt8, _ b: UInt8) -> [UInt8] {
+        var px = [UInt8](repeating: 255, count: W * H * 4)
+        for i in 0..<(W * H) { px[i * 4] = r; px[i * 4 + 1] = g; px[i * 4 + 2] = b }
+        return px
+    }
+
+    private func hsv(_ r: UInt8, _ g: UInt8, _ b: UInt8) -> (h: Double, s: Double, v: Double) {
+        let R = Double(r) / 255, G = Double(g) / 255, B = Double(b) / 255
+        let mx = max(R, G, B), mn = min(R, G, B), d = mx - mn
+        var h = 0.0
+        if d > 0 {
+            if mx == R { h = ((G - B) / d).truncatingRemainder(dividingBy: 6) } else if mx == G { h = (B - R) / d + 2 } else { h = (R - G) / d + 4 }
+            h *= 60
+            if h < 0 { h += 360 }
+        }
+        return (h, mx > 0 ? d / mx : 0, mx)
+    }
+
+    func testToneLinesKeepTheColourAndOnlyChangeBrightness() {
+        let W = 120, H = 90
+        for (r, g, b) in [(30, 110, 100), (200, 140, 40), (90, 20, 150), (40, 40, 40)] as [(UInt8, UInt8, UInt8)] {
+            for direction in [StoryLineDirection.backslash, .slash, .cross] {
+                var px = coloured(W, H, r, g, b)
+                StoryTextureEffects.applyLines(&px, width: W, height: H, params: toneParams(direction, amplitude: 0.35, irregularity: 0.6))
+                let orig = hsv(r, g, b)
+                var darker = 0, lighter = 0, minV = 1.0
+                for i in 0..<(W * H) {
+                    let o = i * 4
+                    let c = hsv(px[o], px[o + 1], px[o + 2])
+                    if c.v < orig.v - 0.01 { darker += 1 }
+                    if c.v > orig.v + 0.01 { lighter += 1 }
+                    minV = min(minV, c.v)
+                    // a cor não muda: mesmo matiz e mesma saturação (tirando o arredondamento em 8 bits)
+                    if orig.s > 0.2 && c.v > 0.08 {
+                        let dh = abs(c.h - orig.h)
+                        XCTAssertLessThan(min(dh, 360 - dh), 4, "matiz em (\(r),\(g),\(b)) \(direction)")
+                        XCTAssertEqual(c.s, orig.s, accuracy: 0.05, "saturação em (\(r),\(g),\(b)) \(direction)")
+                    }
+                }
+                XCTAssertGreaterThan(darker, W * H / 20, "tem linha escura (\(r),\(g),\(b)) \(direction)")
+                XCTAssertGreaterThan(lighter, 0, "tem brilho claro colado (\(r),\(g),\(b)) \(direction)")
+                // uma direção: no máximo −35%; no X, onde as duas linhas se cruzam, (1 − 0,35·0,65)² ≈ −40%
+                XCTAssertGreaterThan(minV, orig.v * (direction == .cross ? 1 - 0.42 : 1 - 0.36), "nunca vira preto")
+            }
+        }
+    }
+
+    func testToneLinesLeaveVeryBrightAreasAlmostUntouched() {
+        let W = 120, H = 90
+        var white = coloured(W, H, 255, 255, 255)
+        StoryTextureEffects.applyLines(&white, width: W, height: H, params: toneParams(.cross, amplitude: 0.35))
+        XCTAssertTrue(white.enumerated().allSatisfy { $0.offset % 4 == 3 || $0.element >= 253 }, "texto branco fica limpo")
+        var mid = coloured(W, H, 120, 120, 120)
+        StoryTextureEffects.applyLines(&mid, width: W, height: H, params: toneParams(.cross, amplitude: 0.35))
+        XCTAssertLessThan(mid.enumerated().filter { $0.offset % 4 == 1 }.map { Int($0.element) }.min()!, 100, "no meio-tom a linha aparece")
+    }
+
+    func testToneLinesFollowTheChosenAngleAndDirection() {
+        let W = 160, H = 160
+        func pattern(_ direction: StoryLineDirection, _ angle: Double) -> [Int] {
+            var px = coloured(W, H, 140, 140, 140)
+            StoryTextureEffects.applyLines(&px, width: W, height: H, params: toneParams(direction, amplitude: 0.35, angle: angle))
+            return (0..<(W * H)).map { Int(px[$0 * 4 + 1]) }
+        }
+        // diferença média entre um pixel e o que está `dist` px adiante numa direção: ao longo da linha ≈ 0, atravessando ≠ 0
+        func meanDiff(_ v: [Int], dx: Double, dy: Double) -> Double {
+            var sum = 0, n = 0
+            for y in 20..<(H - 20) { for x in 20..<(W - 20) {
+                let x2 = x + Int(dx.rounded()), y2 = y + Int(dy.rounded())
+                sum += abs(v[y * W + x] - v[y2 * W + x2]); n += 1
+            } }
+            return Double(sum) / Double(n)
+        }
+        for angle in [45.0, 55.0, 70.0] {
+            let t = angle * Double.pi / 180, d = 12.0
+            let back = pattern(.backslash, angle), fwd = pattern(.slash, angle)
+            let alongBack = meanDiff(back, dx: d * cos(t), dy: d * sin(t))
+            let acrossBack = meanDiff(back, dx: d * cos(t), dy: -d * sin(t))
+            XCTAssertLessThan(alongBack * 2.5, acrossBack, "\\ a \(angle)°: desce para a direita")
+            let alongFwd = meanDiff(fwd, dx: d * cos(t), dy: -d * sin(t))
+            let acrossFwd = meanDiff(fwd, dx: d * cos(t), dy: d * sin(t))
+            XCTAssertLessThan(alongFwd * 2.5, acrossFwd, "/ a \(angle)°: sobe para a direita")
+            let mb = Double(back.reduce(0, +)) / Double(back.count), mf = Double(fwd.reduce(0, +)) / Double(fwd.count)
+            XCTAssertEqual(mb, mf, accuracy: 3, "\\ e / com a mesma força a \(angle)°")
+        }
+    }
+
+    func testToneIrregularityBreaksTheLinesAndSeedChangesTheDrawing() {
+        let W = 200, H = 200
+        func render(_ irregularity: Double, seed: UInt64 = 42) -> [UInt8] {
+            var px = coloured(W, H, 120, 120, 120)
+            var p = toneParams(.backslash, amplitude: 0.35, irregularity: irregularity)
+            p.lineSeed = seed
+            StoryTextureEffects.applyLines(&px, width: W, height: H, params: p)
+            return px
+        }
+        func darkCount(_ px: [UInt8]) -> Int { (0..<(W * H)).filter { px[$0 * 4 + 1] < 100 }.count }
+        let regular = render(0), irregular = render(1)
+        XCTAssertLessThan(Double(darkCount(irregular)), Double(darkCount(regular)) * 0.85, "com irregularidade há falhas e trechos fracos")
+        XCTAssertGreaterThan(darkCount(irregular), darkCount(regular) / 5, "mas as linhas continuam lá")
+        XCTAssertEqual(render(1), render(1), "mesma semente, mesmo desenho")
+        XCTAssertNotEqual(render(1, seed: 1), render(1, seed: 2), "outra imagem, outro desenho")
+        XCTAssertEqual(render(0, seed: 1), render(0, seed: 2), "sem irregularidade a semente não importa")
+    }
+
+    func testToneCrossStaysBalanced() {
+        let W = 120, H = 120
+        func mean(_ d: StoryLineDirection) -> Double {
+            var px = coloured(W, H, 128, 128, 128)
+            StoryTextureEffects.applyLines(&px, width: W, height: H, params: toneParams(d, amplitude: 0.35))
+            return Double((0..<(W * H)).map { Int(px[$0 * 4 + 1]) }.reduce(0, +)) / Double(W * H)
+        }
+        let single = mean(.backslash), cross = mean(.cross)
+        print("tom: brilho médio de 128 → uma direção \(single) · X \(cross)")
+        XCTAssertLessThan(single, 128)
+        XCTAssertGreaterThan(single, 100)
+        XCTAssertLessThan(abs(cross - single), 8, "o X não escurece muito mais que uma direção")
+    }
+
+    func testToneSamplingKeepsTheOlderDrawsAndVariesTheAngle() {
+        var o = textureOptions
+        o.texturePreset = .custom
+        o.customTexture = .balanced
+        o.customTexture.lineStyle = .ink
+        var inkOnly = o
+        inkOnly.customTexture.lineStyle = .ink
+        o.customTexture.lineStyle = .tone
+        var angles = Set<Int>()
+        for seed in 1...40 as ClosedRange<UInt64> {
+            let tone = StoryParams.sample(o, seed: seed), ink = StoryParams.sample(inkOnly, seed: seed)
+            XCTAssertEqual(tone.code, ink.code, "o estilo das linhas não muda o resto do sorteio")
+            XCTAssertEqual(tone.lineDirection, ink.lineDirection)
+            XCTAssertEqual(tone.linePhase, ink.linePhase)
+            XCTAssertEqual(tone.jitterSeed, ink.jitterSeed)
+            XCTAssertEqual(ink.lineAngle, 45, "gravura fica em 45°")
+            XCTAssertGreaterThanOrEqual(tone.lineAngle, 52 - 1e-9)
+            XCTAssertLessThanOrEqual(tone.lineAngle, 58 + 1e-9)
+            XCTAssertNotEqual(tone.lineSeed, 0)
+            angles.insert(Int(tone.lineAngle * 10))
+            XCTAssertTrue(tone.summary.contains("linhas no tom"), tone.summary)
+        }
+        XCTAssertGreaterThan(angles.count, 10, "o ângulo varia um pouco por imagem")
+        XCTAssertEqual(StoryTexture.toneAmplitude(level: 0), 0)
+        XCTAssertEqual(StoryTexture.toneAmplitude(level: 1), StoryTexture.toneAmplitudeCap, accuracy: 1e-9)
+        XCTAssertEqual(StoryTexture.toneAmplitude(level: 0.5), 0.20, accuracy: 0.01)
     }
 
     func testBackslashRunsTopLeftToBottomRightAndSlashTheOtherWay() {
@@ -807,6 +988,71 @@ final class StoryTextureTests: XCTestCase {
         }
         print("contraste local: 10% \(contrast(low)) · 100% \(contrast(high))")
         XCTAssertGreaterThan(contrast(high), contrast(low) * 2, "100% é bem mais marcado que 10%")
+    }
+
+    /// Amostras das linhas no tom num criativo parecido com o print de referência (fundo verde-petróleo escuro, manchas
+    /// laranja e brilho verde embaixo) e com título branco: 3 direções × 25/50/100%, um zoom 4× e Gravura × Tom lado a lado.
+    func testToneLineSamples() throws {
+        let artwork = makeImage(1080, 1920) { ctx in
+            let colors = [CGColor(srgbRed: 0.04, green: 0.16, blue: 0.15, alpha: 1), CGColor(srgbRed: 0.05, green: 0.24, blue: 0.2, alpha: 1)] as CFArray
+            let gradient = CGGradient(colorsSpace: StoryOptimizer.srgb, colors: colors, locations: [0, 1])!
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 1920), end: CGPoint(x: 1080, y: 0), options: [])
+            ctx.setFillColor(CGColor(srgbRed: 0.95, green: 0.62, blue: 0.18, alpha: 1))
+            for (x, y, r) in [(120, 1560, 70), (210, 1500, 55), (300, 1450, 40), (620, 1480, 35), (180, 1380, 45)] as [(CGFloat, CGFloat, CGFloat)] {
+                ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
+            }
+            ctx.setFillColor(CGColor(srgbRed: 0.2, green: 0.75, blue: 0.25, alpha: 1))
+            ctx.fillEllipse(in: CGRect(x: 100, y: 1180, width: 700, height: 160))
+            let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 120, nil)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)]
+            ctx.textPosition = CGPoint(x: 60, y: 1920 - 820)
+            CTLineDraw(CTLineCreateWithAttributedString(NSAttributedString(string: "SORTEIO", attributes: attrs)), ctx)
+        }
+        let base = try StoryOptimizer.rasterize(compose(artwork, StoryParams()))
+        let crop = CGRect(x: 20, y: 280, width: 360, height: 560) // manchas laranja, brilho verde, fundo escuro e o começo do título
+        func lined(_ direction: StoryLineDirection, _ level: Double, style: StoryLineStyle = .tone) throws -> CGImage {
+            var p = StoryParams()
+            p.lineStyle = style
+            p.lineOpacity = style == .tone ? StoryTexture.toneAmplitude(level: level) : StoryTexture.lineAlpha(level: level)
+            p.lineSpacing = style == .tone ? 10 : 8
+            p.lineThickness = style == .tone ? 2 : 3
+            p.lineDirection = direction
+            p.lineAngle = style == .tone ? 55 : 45
+            p.lineIrregularity = style == .tone ? 0.6 : 0
+            p.lineSeed = 99
+            p.linePhase = 3
+            p.linePhase2 = 6
+            return try XCTUnwrap(StoryOptimizer.applyTexture(base, params: p).image.cropping(to: crop))
+        }
+        let levels: [Double] = [0.25, 0.5, 1.0]
+        let directions: [StoryLineDirection] = [.backslash, .slash, .cross]
+        var cells: [CGImage] = []
+        for d in directions { for l in levels { cells.append(try lined(d, l)) } }
+        let w = Int(crop.width), h = Int(crop.height)
+        let sheet = makeImage(w * levels.count, h * directions.count) { ctx in
+            ctx.interpolationQuality = .none
+            for (i, img) in cells.enumerated() {
+                let c = i % levels.count, r = i / levels.count
+                ctx.draw(img, in: CGRect(x: c * w, y: (directions.count - 1 - r) * h, width: w, height: h))
+            }
+        }
+        let zoomCrop = CGRect(x: 0, y: 0, width: 270, height: 180)
+        let zoomSrc = try XCTUnwrap(lined(.backslash, 0.5).cropping(to: zoomCrop))
+        let zoom = makeImage(1080, 720) { ctx in
+            ctx.interpolationQuality = .none
+            ctx.draw(zoomSrc, in: CGRect(x: 0, y: 0, width: 1080, height: 720))
+        }
+        let original = try XCTUnwrap(lined(.backslash, 0).cropping(to: CGRect(x: 0, y: 0, width: w, height: h)))
+        let ink = try lined(.backslash, 0.5, style: .ink), tone = try lined(.backslash, 0.5)
+        let compare = makeImage(w * 3, h) { ctx in
+            ctx.interpolationQuality = .none
+            for (i, img) in [original, ink, tone].enumerated() { ctx.draw(img, in: CGRect(x: i * w, y: 0, width: w, height: h)) }
+        }
+        for (name, img) in [("tom-niveis", sheet), ("tom-zoom-4x", zoom), ("original-gravura-tom", compare)] {
+            let url = write(img, "\(name).jpg", type: .jpeg, quality: 0.95)
+            try? FileManager.default.copyItem(at: url, to: Self.samples.appendingPathComponent("\(name).jpg"))
+            try printBase64(name, url)
+        }
     }
 
     func testTextureFileIsReproducibleFromTheSameSeed() throws {

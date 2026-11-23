@@ -1,5 +1,27 @@
 # Histórico de versões
 
+## [1.0.0-beta.25] — 2026-11-23
+
+**Otimizador em Lote: linhas no tom (mantêm a cor)**
+
+As linhas da beta.24 eram tinta preta e branca por cima da imagem. O novo estilo **Tom (mantém a cor)** imita o print de referência: só clareia e escurece o próprio pixel, sem trocar a cor. A gravura preto e branco continua disponível.
+
+- **Tom (mantém a cor):** R, G e B são multiplicados pelo mesmo fator, então o verde continua verde e o amarelo continua amarelo. Ao clarear, o fator para antes de o canal mais forte estourar, para a cor não mudar.
+  - Variação de brilho no centro da linha: 10% ≈ ±5%, 50% ≈ ±20%, 100% = ±35%. Nunca vira preto.
+  - Borda suave (1 px), miolo escuro com um brilho fraco colado de um lado.
+  - **Ângulo livre** de 30° a 75° (padrão 55°, mais em pé que a diagonal), com ±3° sorteados por imagem.
+  - **Irregularidade** (0–100%): cada linha sai um pouco do lugar e é feita de trechos de ~36 px com força diferente, alguns com falha, como chuva ou filme riscado. O desenho muda de imagem para imagem.
+  - Áreas muito claras (texto branco, luzes) quase não recebem linha.
+- **Gravura (preto e branco):** a linha da beta.24, sem mudanças.
+- **Tela:**
+  - escolha do **estilo** (Tom ou Gravura) no Personalizado;
+  - **botões grandes de direção** com o desenho de cada uma (Esquerda \\, Direita /, Cruzada X, Aleatória);
+  - sliders de **Ângulo** e **Irregularidade** no Tom;
+  - explicação de **Hard-light** e **Overlay** embaixo da Mistura (só na Gravura).
+- **Presets:** Sutil (Tom, 30%, 10 px/2 px, 55°, irregularidade 60%) e Equilibrado (Tom, 60%, 9 px/3 px, 55°, 50%) passam a usar o Tom. Intenso continua em Gravura X.
+- Opções personalizadas salvas antes desta versão continuam em Gravura. Os sorteios novos ficam no fim da sequência, então o resto do sorteio de cada semente não muda.
+- **Testes novos:** cor (matiz e saturação) preservada em fundos verde, laranja, roxo e cinza; nada muda no branco; ângulo e direção conferidos a 45°, 55° e 70°; `\\` e `/` com a mesma força; irregularidade cria falhas e a semente muda o desenho; X equilibrado; sorteio do ângulo. O CI gera amostras num criativo parecido com o print (3 direções × 25/50/100%, zoom 4× e original × Gravura × Tom) e mede o Tom em Release.
+
 ## [1.0.0-beta.24] — 2026-11-23
 
 **Otimizador em Lote: linhas diagonais bem marcadas**

@@ -273,18 +273,37 @@ struct StoryOptimizerView: View {
     private var textureControls: some View {
         Toggle("Linhas diagonais", isOn: $batch.options.customTexture.lines)
         if batch.options.customTexture.lines {
-            Picker("Direção", selection: $batch.options.customTexture.lineDirection) {
-                ForEach(StoryLineDirection.allCases) { Text($0.label).tag($0) }
+            Picker("Estilo", selection: $batch.options.customTexture.lineStyle) {
+                ForEach(StoryLineStyle.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(batch.options.customTexture.lineStyle.hint)
+                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Direção")
+                LineDirectionPicker(selection: $batch.options.customTexture.lineDirection)
             }
             slider("Intensidade", $batch.options.customTexture.lineOpacityPercent, StoryTexture.percentRange, step: 1, format: "%.0f%%")
             slider("Espaçamento", $batch.options.customTexture.lineSpacing, StoryTexture.spacingRange, step: 1, format: "%.0f px")
             slider("Espessura", $batch.options.customTexture.lineThickness, StoryTexture.thicknessRange, step: 1, format: "%.0f px")
-            Picker("Mistura", selection: $batch.options.customTexture.lineBlend) {
-                ForEach(StoryLineBlend.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Text("Medidas em pixels da saída 1080×1920, na horizontal. Cada linha é uma faixa escura com um realce claro colado nela, então aparece sobre fundos escuros, áreas claras e letras. A espessura nunca passa do espaçamento menos 2 px. Intensidade: 10–25% sutil, 50% bem marcado, 80–100% forte.")
+            if batch.options.customTexture.lineStyle == .tone {
+                slider("Ângulo", $batch.options.customTexture.lineAngle, StoryTexture.angleRange, step: 1, format: "%.0f°")
+                slider("Irregularidade", $batch.options.customTexture.lineIrregularity, StoryTexture.percentRange, step: 1, format: "%.0f%%")
+                Text("Medidas em pixels da saída 1080×1920. Espaçamento é a distância de uma linha à próxima, e a espessura é o miolo escuro (a borda é suave). Ângulo a partir da horizontal: 45° é a diagonal exata, mais alto deixa as linhas mais em pé (cada imagem sorteia ±3°). Irregularidade: 0% são linhas contínuas e iguais; quanto mais alto, mais elas variam de força, têm falhas e saem um pouco do lugar. Intensidade: 10–25% quase imperceptível, 50% visível (±20% de brilho), 100% forte (±35%).")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Picker("Mistura", selection: $batch.options.customTexture.lineBlend) {
+                    ForEach(StoryLineBlend.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("**Hard-light:** a faixa escura puxa para o preto e o realce para o branco com a mesma força em qualquer cor. É o mais contrastado: aparece até sobre texto branco e fundo preto.")
+                    Text("**Overlay:** depende do tom de baixo. Nas áreas escuras o realce quase some, e nas claras a faixa escura fica mais leve. Fica mais integrado à imagem e menos marcado.")
+                }
                 .font(.caption).foregroundStyle(.secondary)
+                Text("Medidas em pixels da saída 1080×1920, na horizontal, sempre a 45° e pixel exato. A espessura nunca passa do espaçamento menos 2 px. Intensidade: 10–25% sutil, 50% bem marcado, 80–100% forte.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         Toggle("Serrilhado das bordas (quebra o anti-aliasing)", isOn: $batch.options.customTexture.jitter)
         if batch.options.customTexture.jitter {
@@ -311,7 +330,12 @@ struct StoryOptimizerView: View {
     static func describe(_ t: StoryTexture) -> String {
         var parts: [String] = []
         if t.lines {
-            parts.append("linhas \(t.lineDirection.label.lowercased()), \(Int(t.lineOpacityPercent))%, espaçamento \(Int(t.lineSpacing)) px, espessura \(Int(t.lineThickness)) px, \(t.lineBlend.label)")
+            switch t.lineStyle {
+            case .tone:
+                parts.append("linhas no tom (mantêm a cor) \(t.lineDirection.label.lowercased()), \(Int(t.lineOpacityPercent))%, \(Int(t.lineAngle))°, espaçamento \(Int(t.lineSpacing)) px, espessura \(Int(t.lineThickness)) px, irregularidade \(Int(t.lineIrregularity))%")
+            case .ink:
+                parts.append("linhas em gravura \(t.lineDirection.label.lowercased()), \(Int(t.lineOpacityPercent))%, espaçamento \(Int(t.lineSpacing)) px, espessura \(Int(t.lineThickness)) px, \(t.lineBlend.label)")
+            }
         }
         if t.jitter { parts.append("serrilhado \(Int(t.jitterPercent))%") }
         if t.aberration { parts.append("aberração RGB \(Int(t.aberrationPercent))%") }
@@ -565,6 +589,74 @@ struct StoryTile: View {
             Image(systemName: "minus.circle.fill")
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, Color.gray)
+        }
+    }
+}
+
+/// Botões grandes de direção das linhas, cada um com o desenho da direção (beta.25).
+struct LineDirectionPicker: View {
+    @Binding var selection: StoryLineDirection
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(StoryLineDirection.allCases) { direction in
+                let selected = selection == direction
+                Button {
+                    selection = direction
+                } label: {
+                    VStack(spacing: 5) {
+                        LineDirectionGlyph(direction: direction)
+                            .frame(width: 48, height: 30)
+                        Text(direction.shortLabel)
+                            .font(.caption.weight(selected ? .semibold : .regular))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(selected ? Brand.red.opacity(0.22) : Color.white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(selected ? Brand.red : Color.white.opacity(0.12), lineWidth: selected ? 2 : 1)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(direction.label)
+            }
+        }
+    }
+}
+
+/// Desenho pequeno de cada direção: \, /, X ou o símbolo de sorteio.
+struct LineDirectionGlyph: View {
+    let direction: StoryLineDirection
+
+    var body: some View {
+        if direction == .random {
+            Image(systemName: "shuffle")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Canvas { ctx, size in
+                let h = size.height
+                var path = Path()
+                var x: CGFloat = -h
+                while x < size.width + h {
+                    if direction != .slash {
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x + h, y: h))
+                    }
+                    if direction != .backslash {
+                        path.move(to: CGPoint(x: x + h, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: h))
+                    }
+                    x += 8
+                }
+                ctx.clip(to: Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 4))
+                ctx.stroke(path, with: .color(.white.opacity(0.85)), lineWidth: 1.6)
+            }
         }
     }
 }
