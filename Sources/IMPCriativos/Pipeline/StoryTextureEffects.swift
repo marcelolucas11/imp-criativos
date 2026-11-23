@@ -119,7 +119,9 @@ enum StoryTextureEffects {
     /// Número de 0 a 1 tirado de (a, b, semente): sempre o mesmo para os mesmos valores.
     @inline(__always)
     static func hash01(_ a: Int, _ b: Int, _ seed: UInt64) -> Double {
-        var h = seed &+ UInt64(bitPattern: Int64(a)) &* 0x9E37_79B9_7F4A_7C15 &+ UInt64(bitPattern: Int64(b)) &* 0xC2B2_AE3D_27D4_EB4F
+        let ka: UInt64 = UInt64(bitPattern: Int64(a)) &* 0x9E37_79B9_7F4A_7C15
+        let kb: UInt64 = UInt64(bitPattern: Int64(b)) &* 0xC2B2_AE3D_27D4_EB4F
+        var h: UInt64 = seed &+ ka &+ kb
         h ^= h >> 30
         h = h &* 0xBF58_476D_1CE4_E5B9
         h ^= h >> 27
@@ -162,12 +164,16 @@ enum StoryTextureEffects {
     /// de o canal mais forte estourar — senão a proporção entre os canais, e com ela a cor, mudaria.
     @inline(__always)
     static func toneScale(r: UInt8, g: UInt8, b: UInt8, factor: Double) -> (UInt8, UInt8, UInt8) {
-        var f = max(factor, 0)
+        var f: Double = max(factor, 0)
         if f > 1 {
-            let m = Double(max(r, max(g, b)))
+            let m: Double = Double(max(r, max(g, b)))
             if m > 0 { f = min(f, 255 / m) }
         }
-        func c(_ v: UInt8) -> UInt8 { UInt8(min(max((Double(v) * f).rounded(), 0), 255)) }
+        let k: Double = f
+        func c(_ v: UInt8) -> UInt8 {
+            let x: Double = (Double(v) * k).rounded()
+            return UInt8(min(max(x, 0), 255))
+        }
         return (c(r), c(g), c(b))
     }
 
@@ -177,67 +183,104 @@ enum StoryTextureEffects {
     /// `lineOpacity` é a variação máxima de brilho no centro da linha. No X as duas camadas entram em sequência.
     static func applyToneLines(_ px: inout [UInt8], width W: Int, height H: Int, params p: StoryParams) {
         guard p.lineOpacity > 0, W > 0, H > 0, px.count >= W * H * 4 else { return }
-        let s = Double(min(max(p.lineSpacing, 4), 64))
-        let t = Double(min(max(p.lineThickness, 1), Int(s) - 2))
-        let r = min(max(p.lineIrregularity.isFinite ? p.lineIrregularity : 0, 0), 1)
-        let theta = min(max(p.lineAngle.isFinite ? p.lineAngle : 45, 10), 80) * Double.pi / 180
-        let sn = sin(theta), cs = cos(theta)
-        let useBack = p.lineDirection != .slash
-        let useFwd = p.lineDirection != .backslash
-        let cross = useBack && useFwd
-        let amp = min(max(p.lineOpacity, 0), 0.6) * (cross ? StoryTexture.lineCrossBalance : 1)
+        let spacingPx: Int = min(max(p.lineSpacing, 4), 64)
+        let s: Double = Double(spacingPx)
+        let t: Double = Double(min(max(p.lineThickness, 1), spacingPx - 2))
+        let irr: Double = p.lineIrregularity.isFinite ? p.lineIrregularity : 0
+        let r: Double = min(max(irr, 0), 1)
+        let angle: Double = p.lineAngle.isFinite ? p.lineAngle : 45
+        let theta: Double = min(max(angle, 10), 80) * Double.pi / 180
+        let sn: Double = Foundation.sin(theta)
+        let cs: Double = Foundation.cos(theta)
+        let useBack: Bool = p.lineDirection != .slash
+        let useFwd: Bool = p.lineDirection != .backslash
+        let cross: Bool = useBack && useFwd
+        let balance: Double = cross ? StoryTexture.lineCrossBalance : 1
+        let amp: Double = min(max(p.lineOpacity, 0), 0.6) * balance
         // quanto cada linha pode andar para o lado sem encostar na vizinha
-        let maxShift = r * max(0, (s - t - 2) / 2)
-        let reach = t / 2 + 2.3
-        let segLen = StoryTexture.toneSegmentLength
-        var layers: [(slash: Bool, phase: Double, seed: UInt64)] = []
-        if useBack { layers.append((slash: false, phase: Double(p.linePhase), seed: p.lineSeed)) }
-        if useFwd { layers.append((slash: true, phase: Double(cross ? p.linePhase2 : p.linePhase), seed: cross ? p.lineSeed ^ 0x9E37_79B9_7F4A_7C15 : p.lineSeed)) }
-        px.withUnsafeMutableBufferPointer { buf in
-            for layer in layers {
-                // n: posição perpendicular às linhas (px) · u: posição ao longo da linha (px), com y de cima para baixo
-                // \ : n = x·sen − y·cos, u = x·cos + y·sen  ·  / : n = x·sen + y·cos, u = x·cos − y·sen
-                let ny = layer.slash ? cs : -cs
-                let uy = layer.slash ? -sn : sn
-                for y in 0..<H {
-                    var n = Double(y) * ny + layer.phase
-                    var u = Double(y) * uy
-                    var o = y * W * 4
-                    for _ in 0..<W {
-                        let q = n / s
-                        let line = Int(q.rounded(.down))
-                        let shift = maxShift > 0 ? (hash01(line, -7, layer.seed) * 2 - 1) * maxShift : 0
-                        let d = (q - Double(line)) * s - s / 2 - shift
-                        if abs(d) <= reach {
-                            let profile = toneProfile(distance: d, thickness: t)
-                            var strength = 1.0
-                            if r > 0 {
-                                let a = u / segLen + hash01(line, -3, layer.seed) * 8
-                                let j = Int(a.rounded(.down))
-                                let f = smoothstep(0, 1, a - Double(j))
-                                let s0 = segmentStrength(line: line, segment: j, irregularity: r, seed: layer.seed)
-                                let s1 = segmentStrength(line: line, segment: j + 1, irregularity: r, seed: layer.seed)
-                                strength = s0 + (s1 - s0) * f
-                            }
-                            if profile != 0 && strength > 0 {
-                                let R = buf[o], G = buf[o + 1], B = buf[o + 2]
-                                let luma = (0.299 * Double(R) + 0.587 * Double(G) + 0.114 * Double(B)) / 255
-                                let k = amp * profile * strength * toneProtection(luma: luma)
-                                if k != 0 {
-                                    let out = toneScale(r: R, g: G, b: B, factor: 1 + k)
-                                    buf[o] = out.0
-                                    buf[o + 1] = out.1
-                                    buf[o + 2] = out.2
-                                }
-                            }
+        let room: Double = max(0, (s - t - 2) / 2)
+        let maxShift: Double = r * room
+        let reach: Double = t / 2 + 2.3
+        let phaseFwd: Double = Double(cross ? p.linePhase2 : p.linePhase)
+        let seedFwd: UInt64 = cross ? (p.lineSeed ^ 0x9E37_79B9_7F4A_7C15) : p.lineSeed
+        let geo = ToneGeometry(spacing: s, thickness: t, irregularity: r, sin: sn, cos: cs, amplitude: amp, maxShift: maxShift, reach: reach)
+        px.withUnsafeMutableBufferPointer { (buf: inout UnsafeMutableBufferPointer<UInt8>) -> Void in
+            if useBack { toneLayer(buf, width: W, height: H, geo: geo, slash: false, phase: Double(p.linePhase), seed: p.lineSeed) }
+            if useFwd { toneLayer(buf, width: W, height: H, geo: geo, slash: true, phase: phaseFwd, seed: seedFwd) }
+        }
+    }
+
+    /// Medidas de uma passada de linhas no tom (as mesmas para as duas diagonais do X).
+    struct ToneGeometry {
+        let spacing: Double
+        let thickness: Double
+        let irregularity: Double
+        let sin: Double
+        let cos: Double
+        let amplitude: Double
+        let maxShift: Double
+        let reach: Double
+    }
+
+    /// Uma família de linhas paralelas no tom.
+    /// n: posição perpendicular às linhas (px) · u: posição ao longo da linha (px), com y de cima para baixo.
+    /// `\`: n = x·sen − y·cos, u = x·cos + y·sen  ·  `/`: n = x·sen + y·cos, u = x·cos − y·sen.
+    static func toneLayer(_ buf: UnsafeMutableBufferPointer<UInt8>, width W: Int, height H: Int, geo g: ToneGeometry,
+                          slash: Bool, phase: Double, seed: UInt64) {
+        let s: Double = g.spacing
+        let ny: Double = slash ? g.cos : -g.cos
+        let uy: Double = slash ? -g.sin : g.sin
+        let segLen: Double = StoryTexture.toneSegmentLength
+        for y in 0..<H {
+            var n: Double = Double(y) * ny + phase
+            var u: Double = Double(y) * uy
+            var o: Int = y * W * 4
+            for _ in 0..<W {
+                let q: Double = n / s
+                let line: Int = Int(q.rounded(.down))
+                var shift: Double = 0
+                if g.maxShift > 0 {
+                    let h: Double = hash01(line, -7, seed)
+                    shift = (h * 2 - 1) * g.maxShift
+                }
+                let frac: Double = q - Double(line)
+                let d: Double = frac * s - s / 2 - shift
+                if abs(d) <= g.reach {
+                    let profile: Double = toneProfile(distance: d, thickness: g.thickness)
+                    let strength: Double = toneStrength(line: line, along: u, segmentLength: segLen, irregularity: g.irregularity, seed: seed)
+                    if profile != 0 && strength > 0 {
+                        let R: UInt8 = buf[o], G: UInt8 = buf[o + 1], B: UInt8 = buf[o + 2]
+                        let lr: Double = 0.299 * Double(R)
+                        let lg: Double = 0.587 * Double(G)
+                        let lb: Double = 0.114 * Double(B)
+                        let luma: Double = (lr + lg + lb) / 255
+                        let k: Double = g.amplitude * profile * strength * toneProtection(luma: luma)
+                        if k != 0 {
+                            let out = toneScale(r: R, g: G, b: B, factor: 1 + k)
+                            buf[o] = out.0
+                            buf[o + 1] = out.1
+                            buf[o + 2] = out.2
                         }
-                        n += sn
-                        u += cs
-                        o += 4
                     }
                 }
+                n += g.sin
+                u += g.cos
+                o += 4
             }
         }
+    }
+
+    /// Força do risco num ponto da linha: os trechos têm força própria e a passagem de um para o outro é suave.
+    @inline(__always)
+    static func toneStrength(line: Int, along u: Double, segmentLength: Double, irregularity r: Double, seed: UInt64) -> Double {
+        guard r > 0 else { return 1 }
+        let offset: Double = hash01(line, -3, seed) * 8
+        let a: Double = u / segmentLength + offset
+        let j: Int = Int(a.rounded(.down))
+        let f: Double = smoothstep(0, 1, a - Double(j))
+        let s0: Double = segmentStrength(line: line, segment: j, irregularity: r, seed: seed)
+        let s1: Double = segmentStrength(line: line, segment: j + 1, irregularity: r, seed: seed)
+        return s0 + (s1 - s0) * f
     }
 
     // MARK: - Serrilhado das bordas
