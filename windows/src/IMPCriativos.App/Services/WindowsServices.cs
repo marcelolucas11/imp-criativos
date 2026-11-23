@@ -7,7 +7,6 @@ using System.Windows.Media.Imaging;
 using IMPCriativos.Core.Imaging;
 using IMPCriativos.Core.Pipeline;
 using IMPCriativos.Core.Storage;
-using Microsoft.Toolkit.Uwp.Notifications;
 using Microsoft.Win32;
 using SkiaSharp;
 
@@ -138,20 +137,17 @@ public static class StartupItem
 }
 
 /// <summary>Notificações: toast do Windows; se falhar, balão do ícone da bandeja.</summary>
+/// <summary>
+/// Notificação de "lote terminou": balão do ícone da bandeja, que o Windows 10/11 mostra como notificação
+/// (Central de Ações) com o nome e o ícone do app.
+/// </summary>
 public static class Toast
 {
-    public static Action<string, string>? Fallback { get; set; }
+    public static Action<string, string>? Handler { get; set; }
 
     public static void Post(string title, string body)
     {
-        try
-        {
-            new ToastContentBuilder().AddText(title).AddText(body).Show();
-        }
-        catch
-        {
-            Fallback?.Invoke(title, body);
-        }
+        try { Handler?.Invoke(title, body); } catch { }
     }
 }
 

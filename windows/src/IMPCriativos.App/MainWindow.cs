@@ -8,6 +8,8 @@ using IMPCriativos.App.Views;
 using IMPCriativos.Core.Models;
 using IMPCriativos.Core.Updates;
 
+using Page = IMPCriativos.App.Views.Page;
+
 namespace IMPCriativos.App;
 
 /// <summary>Janela principal: menu lateral (mesma ordem do Mac) + tela escolhida.</summary>

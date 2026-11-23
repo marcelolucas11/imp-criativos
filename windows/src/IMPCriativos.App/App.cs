@@ -21,34 +21,7 @@ public sealed class App : Application
     public bool Quitting { get; private set; }
     public static bool SkipQuitConfirmation { get; set; }
 
-    private SingleInstance? _single;
-
-    [STAThread]
-    public static int Main(string[] args)
-    {
-        // teste de fumaça do CI: abre cada tela, roda o Otimizador e salva capturas (sem instância única)
-        var smoke = Array.IndexOf(args, "--smoke-test");
-        if (smoke >= 0)
-        {
-            var folder = smoke + 1 < args.Length ? args[smoke + 1] : Path.Combine(Path.GetTempPath(), "imp-smoke");
-            return SmokeTest.Run(folder);
-        }
-
-        var single = new SingleInstance();
-        if (!single.IsFirst)
-        {
-            SingleInstance.SignalFirst();
-            single.Dispose();
-            return 0;
-        }
-        var app = new App { _single = single };
-        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        var background = args.Contains("--background");
-        app.Startup += (_, _) => app.Boot(showWindow: !background);
-        var code = app.Run();
-        single.Dispose();
-        return code;
-    }
+    internal SingleInstance? _single;
 
     /// <summary>Liga os serviços do Windows no Core (OCR, HEIC, notificações, risco de bateria).</summary>
     public static void ConfigureServices()
@@ -87,7 +60,7 @@ public sealed class App : Application
         {
             if (e.PropertyName == nameof(model.Settings.RunInBackground)) Dispatcher.Invoke(() => Tray.Visible = model.Settings.RunInBackground);
         };
-        Toast.Fallback = (t, b) => Dispatcher.BeginInvoke(() => Tray?.Balloon(t, b));
+        Toast.Handler = (t, b) => Dispatcher.BeginInvoke(() => Tray?.Balloon(t, b));
 
         _single?.Listen(() => Dispatcher.BeginInvoke(() => ShowMain()));
 
