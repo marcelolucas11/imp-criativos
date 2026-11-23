@@ -39,7 +39,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project IMPCriativos.xcodeproj -scheme IMPCriativosLogicTests -destination 'platform=macOS,arch=arm64' \
-            -derivedDataPath build-tests ARCHS=arm64 CODE_SIGN_IDENTITY="-" test 2>&1 | tee test.log | grep -E "Test Case|Executed|error:|failed|ruído|granulação|Otimizador:" || true
+            -derivedDataPath build-tests ARCHS=arm64 CODE_SIGN_IDENTITY="-" test 2>&1 | tee test.log | grep -E "Test Case|Executed|error:|failed|ruído|granulação|Otimizador:|PNG blocos|SAMPLEB64" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" test.log
 
       - name: Amostras do Otimizador em Lote
