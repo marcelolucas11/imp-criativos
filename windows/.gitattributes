@@ -1,0 +1,6 @@
+# Prompts e textos precisam ter quebra de linha LF, igual ao Mac (o checkout do Windows trocaria por CRLF).
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.jpg binary
+*.dll binary

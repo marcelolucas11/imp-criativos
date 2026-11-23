@@ -1,0 +1,67 @@
+{
+  "id" : "11111111-2222-4333-8444-555555555555",
+  "name" : "Lote de teste",
+  "createdAt" : "2026-11-21T10:00:00Z",
+  "client" : {
+    "id" : "0F4E8B1C-2D3A-4B5C-8D9E-112233445566",
+    "name" : "Cliente Ação",
+    "removeItems" : [ "Logotipo da empresa" ],
+    "axes" : [ { "id" : "A1B2C3D4-E5F6-4711-8899-AABBCCDDEEFF", "name" : "Meu eixo", "instruction" : "Make it look like a comic book cover." } ],
+    "defaultVariations" : 2,
+    "extraInstructions" : "",
+    "createdAt" : "2026-11-20T14:03:09Z"
+  },
+  "inputFolder" : "/Users/marcelo/Desktop/criativos",
+  "cleanProvider" : "openai",
+  "variationProvider" : "gemini",
+  "analysisProvider" : "gemini",
+  "variationsPerItem" : 2,
+  "sizeMode" : { "fixed" : { "width" : 1080, "height" : 1920 } },
+  "format" : "jpg",
+  "verifyText" : true,
+  "state" : "review",
+  "items" : [
+    {
+      "id" : "99999999-8888-4777-8666-555555555555",
+      "sourceName" : "criativo 1.png",
+      "originalFile" : "originais/001.png",
+      "pixelWidth" : 1080,
+      "pixelHeight" : 1350,
+      "cleanStatus" : "done",
+      "cleanedFile" : "limpos/99999999-abcd1234.png",
+      "cleanReview" : "approved",
+      "analysisDone" : true,
+      "transcript" : "GANHE GIROS\nSÓ HOJE",
+      "cleanErrorKind" : "rateLimit",
+      "plan" : {
+        "forbiddenTerms" : [ "AVIATOR" ],
+        "originalText" : "AVIATOR\nGANHE GIROS",
+        "finalText" : "GANHE GIROS",
+        "cleanInstruction" : "Erase the AVIATOR logo.",
+        "variationRules" : "",
+        "doubts" : "",
+        "model" : "gpt-6-sol",
+        "needsCleaning" : true
+      },
+      "planDone" : true,
+      "variations" : [
+        {
+          "id" : "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+          "index" : 1,
+          "axisName" : "Título 3D",
+          "axisInstruction" : "x",
+          "file" : "variacoes/99999999-v1-1234abcd.png",
+          "status" : "done",
+          "review" : "pending",
+          "attempts" : 1,
+          "providerUsed" : "gemini",
+          "axisNumber" : 27,
+          "retryAt" : "2026-11-21T10:05:00Z"
+        }
+      ]
+    }
+  ],
+  "costUSD" : 0.164,
+  "instructions" : { "raw" : "tirar aviator", "removeItems" : [ "Palavra \"Aviator\"" ], "textChanges" : "", "direction" : "" },
+  "axisTest" : true
+}

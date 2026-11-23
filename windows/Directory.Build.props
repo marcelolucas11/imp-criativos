@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- Versão lida do VERSION da raiz do repositório (o mesmo arquivo que o Mac usa) -->
+    <IMPVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</IMPVersion>
+    <Version>$(IMPVersion)</Version>
+    <InformationalVersion>$(IMPVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Company>Impera Services</Company>
+    <Product>IMP Criativos</Product>
+  </PropertyGroup>
+</Project>

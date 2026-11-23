@@ -278,6 +278,48 @@ identidade entre versões (com verificação de origem no atualizador).
 - `release.yml`: quando o arquivo `VERSION` muda na `main`, compila em Release, empacota `.dmg`, `.zip` e `.sha256`,
   cria a tag `v<VERSION>` e publica a Release (pré-lançamento quando a versão tem `-beta`).
 
+## Versão Windows — beta.27
+
+Mesmo app, em C# no .NET 10 com WPF, em `windows/`. O Mac não muda; as regras para manter as duas versões juntas estão no `CLAUDE.md`
+e o mapa arquivo por arquivo em [WINDOWS-PLANO.md](WINDOWS-PLANO.md).
+
+```
+windows/IMPCriativos.Windows.sln
+  src/IMPCriativos.Core/     net10.0, sem nada de Windows: modelos, prompts, provedores, pipeline, Otimizador (SkiaSharp +
+                             libjpeg-turbo por P/Invoke), atualizador, histórico
+  src/IMPCriativos.App/      net10.0-windows10.0.19041.0, WPF: telas, bandeja, OCR, HEIC, notificações, iniciar com o Windows
+  tests/IMPCriativos.Tests/  xUnit, roda no Linux e no Windows (inclui a paridade com o Mac)
+  installer/IMPCriativos.iss Inno Setup 6, por usuário
+  build/publish.ps1          app self-contained (arquivo único + turbojpeg.dll) e instalador
+  build/smoke.ps1            teste de fumaça (--smoke-test): abre cada tela, salva capturas e confere o Otimizador
+```
+
+| Mac | Windows |
+|---|---|
+| SwiftUI / AppKit | WPF (tema Fluent escuro, telas montadas em código) |
+| Barra de menus | Ícone na bandeja (`NotifyIcon`) com o mesmo menu |
+| UserDefaults | `preferencias.json` |
+| `chaves.json` com permissão 600 | `chaves.json` cifrado com DPAPI (usuário atual) |
+| Vision (OCR) | `Windows.Media.Ocr` atrás de `ILocalTextReader` (Português primeiro) |
+| ImageIO / Core Image | SkiaSharp; HEIC pelo WIC |
+| libjpeg-turbo estática | `turbojpeg.dll` da mesma versão e SHA-256 |
+| SMAppService (abrir ao ligar) | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` com `--background` |
+| UserNotifications | Toast do Windows; se falhar, balão da bandeja |
+| `ditto` (ZIP) | `System.IO.Compression` |
+| Atualizador troca o `.app` | Atualizador baixa `IMP-Criativos-Setup-<versão>-windows-x64.exe`, confere o `.sha256` e roda em silêncio |
+| ⌘ | Ctrl |
+
+**Dados no Windows:** `%LOCALAPPDATA%\IMP Criativos\` (`clients\`, `jobs\`, `logs\AAAA-MM.jsonl`, `preferencias.json`, `chaves.json`).
+O programa fica em `%LOCALAPPDATA%\Programs\IMP Criativos\`.
+
+**Paridade:** o job do Mac no CI compila `scripts/paridade/main.swift` com o código Swift e gera os prompts e os sorteios do
+Otimizador para várias opções e sementes; o `ParidadeMacTests` exige o mesmo resultado em C#. Os eixos saem do mesmo script
+(`scripts/eixos_variacao.py`). Os arquivos do Otimizador não são idênticos bit a bit aos do Mac (Core Image e Skia arredondam
+diferente), mas os parâmetros sorteados são, e no Windows a mesma semente gera o mesmo arquivo.
+
+**Publicação:** o job `windows` do `release.yml` roda depois do Mac (se falhar, o Mac já saiu), sobe o `.exe` e o `.exe.sha256`
+na Release (nunca um `.zip`) e atualiza a tag fixa `windows`.
+
 ## Fora da v1
 
-Vídeos · espanhol · Macs Intel · envio direto para a Meta · texto aplicado por código com templates · qualquer nicho que não seja cassino ou bet.
+Vídeos · espanhol · Macs Intel · Windows ARM · envio direto para a Meta · texto aplicado por código com templates · qualquer nicho que não seja cassino ou bet.

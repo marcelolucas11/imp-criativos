@@ -4,6 +4,8 @@
 
 ## 1. Instalar
 
+### Mac
+
 1. Baixe a versão mais nova pelo link fixo [IMP-Criativos.dmg](https://github.com/marcelolucas11/imp-criativos/releases/download/mac/IMP-Criativos.dmg) (o mesmo do botão **Baixar para Mac** no README). Versões anteriores ficam em [Releases](https://github.com/marcelolucas11/imp-criativos/releases).
 2. Abra o `.dmg` e arraste **IMP Criativos** para a pasta **Aplicativos** (ou para outra pasta, como um SSD externo).
 3. **Primeira abertura:** como o app não é distribuído pela App Store, o macOS mostra um aviso.
@@ -13,6 +15,21 @@
    Isso só é necessário na primeira vez.
 
 > Não rode o app de dentro do `.dmg`: o botão de atualizar precisa que ele esteja numa pasta normal.
+
+### Windows
+
+1. Baixe a versão mais nova pelo link fixo [IMP-Criativos-Setup.exe](https://github.com/marcelolucas11/imp-criativos/releases/download/windows/IMP-Criativos-Setup.exe) (o mesmo do botão **Baixar para Windows** no README). Versões anteriores ficam em [Releases](https://github.com/marcelolucas11/imp-criativos/releases) (`IMP-Criativos-Setup-<versão>-windows-x64.exe`).
+2. Abra o instalador. Ele instala só para o seu usuário, em `%LOCALAPPDATA%\Programs\IMP Criativos`, sem pedir administrador, e cria o atalho no Menu Iniciar (o da Área de Trabalho é opcional).
+3. **SmartScreen:** como o app não é assinado, o Windows pode mostrar **"O Windows protegeu o computador"**. Clique em **Mais informações → Executar assim mesmo**. Isso só aparece na instalação.
+4. O app abre no fim da instalação. Ao fechar a janela com um lote rodando, ele continua na **bandeja** (perto do relógio), se "Continuar em segundo plano" estiver ligado.
+
+Requisitos: Windows 10 (versão 2004 ou mais nova) ou Windows 11, 64 bits.
+
+**HEIC (fotos do iPhone):** o Windows só abre HEIC com as **Extensões de Imagem HEIF** da Microsoft Store (gratuitas). Sem elas, a imagem fica com o erro "Instale as Extensões de Imagem HEIF da Microsoft Store para abrir HEIC." JPG, PNG e WebP funcionam sem nada.
+
+**Leitura de texto local (OCR):** antes de gastar com a IA, o app confere o texto do criativo com o OCR do próprio Windows. Ele precisa do idioma **Português (Brasil)** instalado: Configurações do Windows → Hora e idioma → Idioma e região → Adicionar um idioma → Português (Brasil) (o pacote básico já traz o OCR). Sem nenhum idioma com OCR, a conferência local é pulada (fica um aviso no Histórico) e a checagem por IA continua normalmente.
+
+**Dados:** lotes, clientes, histórico e chaves ficam em `%LOCALAPPDATA%\IMP Criativos\`. Desinstalar (Configurações do Windows → Aplicativos) não apaga essa pasta.
 
 ## 2. Chaves de API
 

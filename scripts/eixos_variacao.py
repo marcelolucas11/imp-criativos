@@ -4,6 +4,7 @@
 Gera:
   - Sources/IMPCriativos/Models/DefaultAxes.swift  (ClientProfile.defaultAxes)
   - docs/EIXOS-DE-VARIACAO.md                      (biblioteca para consulta)
+  - windows/src/IMPCriativos.Core/Models/DefaultAxes.cs (versão Windows, 1.0.0-beta.27)
 e valida as regras do nicho antes de escrever qualquer arquivo.
 
 Uso (na raiz do repositório): python3 scripts/eixos_variacao.py .
@@ -241,6 +242,51 @@ def gen_swift(axes):
     return "\n".join(lines)
 
 
+def cs_string(s):
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def gen_cs(axes):
+    """1.0.0-beta.27: o mesmo catálogo para a versão Windows (windows/src/IMPCriativos.Core/Models/DefaultAxes.cs)."""
+    lines = [
+        "// ARQUIVO GERADO por scripts/eixos_variacao.py — não edite à mão (DefaultAxes.swift e docs/EIXOS-DE-VARIACAO.md são gerados junto).",
+        "// 50 eixos de variação para criativos de CASSINO ONLINE e BET (apostas esportivas), sem cassino físico.",
+        "// Ordem alternando famílias: com o rodízio, cada criativo recebe eixos seguidos de famílias diferentes.",
+        "// As regras de coerência (mesmo jogo/esporte, mesmo personagem 3D, texto exato, sem promessa nova) ficam no",
+        "// prompt-base (`Prompts.Variation` + `Niche`), então valem também para eixos que o usuário escrever.",
+        "",
+        "namespace IMPCriativos.Core.Models;",
+        "",
+        "/// <summary>Eixo do catálogo que vem com o app (tela \"Catálogo de eixos\").</summary>",
+        "public sealed record BuiltInAxis(int Number, string Name, string Family, string Change, string TextRisk, string Instruction)",
+        "{",
+        "    public int Id => Number;",
+        "    public VariationAxis Axis => new(Name, Instruction);",
+        "}",
+        "",
+        "public static class AxisCatalog",
+        "{",
+        "    public static readonly string[] Families = { " + ", ".join(f'"{cs_string(f)}"' for f in FAM.values()) + " };",
+        "    public static readonly string[] Risks = { \"Baixo\", \"Médio\", \"Alto\" };",
+        "",
+        "    public static readonly BuiltInAxis[] BuiltIn =",
+        "    {",
+    ]
+    for i, (fam, name, muda, risco, serve, inst) in enumerate(axes, 1):
+        lines.append(f'        new({i}, "{cs_string(name)}", "{cs_string(FAM[fam])}",')
+        lines.append(f'            "{cs_string(muda)}", "{risco}",')
+        lines.append(f'            "{cs_string(inst)}"),')
+    lines += [
+        "    };",
+        "",
+        "    /// <summary>Eixo do catálogo com esta instrução (os eixos da lista do cliente são reconhecidos pela instrução).</summary>",
+        "    public static BuiltInAxis? Entry(VariationAxis axis) => BuiltIn.FirstOrDefault(a => a.Instruction == axis.Instruction);",
+        "}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def gen_md(axes):
     out = []
     w = out.append
@@ -331,6 +377,8 @@ if __name__ == "__main__":
         print("ERRO: ordem com blocos pouco variados"); sys.exit(1)
     open(f"{root}/Sources/IMPCriativos/Models/DefaultAxes.swift", "w", encoding="utf-8").write(gen_swift(ordered))
     open(f"{root}/docs/EIXOS-DE-VARIACAO.md", "w", encoding="utf-8").write(gen_md(ordered))
+    # 1.0.0-beta.27: versão Windows (mesma fonte, mesma ordem)
+    open(f"{root}/windows/src/IMPCriativos.Core/Models/DefaultAxes.cs", "w", encoding="utf-8").write(gen_cs(ordered))
     words = [len(a[5].split()) for a in AXES]
     print(f"OK: {len(AXES)} eixos · {dict(Counter(FAM[a[0]] for a in AXES))}")
     print(f"risco: {dict(Counter(a[3] for a in AXES))} · palavras: {min(words)}–{max(words)}")

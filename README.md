@@ -4,11 +4,14 @@
 
 <h1 align="center">IMP Criativos</h1>
 
-<p align="center">App para Mac que remove a marca de criativos de <b>cassino online e bet (apostas esportivas)</b> e gera variações em lote com IA (Gemini ou GPT).</p>
+<p align="center">App para Mac e Windows que remove a marca de criativos de <b>cassino online e bet (apostas esportivas)</b> e gera variações em lote com IA (Gemini ou GPT).</p>
 
 <p align="center">
   <a href="https://github.com/marcelolucas11/imp-criativos/releases/download/mac/IMP-Criativos.dmg">
     <img src="Resources/botao-baixar-mac.svg" width="340" alt="Baixar para Mac — IMP Criativos, versão mais nova">
+  </a>
+  <a href="https://github.com/marcelolucas11/imp-criativos/releases/download/windows/IMP-Criativos-Setup.exe">
+    <img src="Resources/botao-baixar-windows.svg" width="340" alt="Baixar para Windows — IMP Criativos, versão mais nova">
   </a>
 </p>
 
@@ -42,7 +45,7 @@ Exemplo: 50 criativos × 4 variações = **50 limpos + 200 variações**.
 
 ### Otimizador em Lote (Stories 9:16) — sem IA
 
-Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O). Roda **100% no Mac**: sem internet, sem chave de API e sem custo.
+Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O; no Windows, na bandeja e em Ctrl+Shift+O). Roda **100% no computador**: sem internet, sem chave de API e sem custo.
 
 - Arraste até **100 imagens** (JPG, PNG, WebP, HEIC) ou uma pasta; miniaturas com status, remover item ou limpar tudo.
 - **Enquadramento 9:16 (1080×1920):** Preencher (corta o excesso), Fundo desfocado (imagem inteira + cópia desfocada em cima e embaixo) ou Cor sólida (preto, cor dominante ou cor escolhida).
@@ -63,6 +66,8 @@ Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O
 
 ## Instalar
 
+### Mac
+
 1. Clique em **Baixar para Mac** acima (ou baixe o `.dmg` de qualquer versão em [Releases](../../releases)).
 2. Arraste o **IMP Criativos** para **Aplicativos**.
 3. Na primeira vez: **clique direito no app → Abrir → Abrir**.
@@ -71,17 +76,27 @@ Aba própria no menu lateral (também no Início, na barra de menus e em ⇧⌘O
 
 Requisitos: macOS 14 (Sonoma) ou superior, Mac com Apple Silicon (M1 em diante).
 
-Guia completo: [docs/INSTALACAO.md](docs/INSTALACAO.md)
+### Windows
+
+1. Clique em **Baixar para Windows** acima (ou baixe o `IMP-Criativos-Setup-<versão>-windows-x64.exe` de qualquer versão em [Releases](../../releases)).
+2. Abra o instalador. Ele instala só para o seu usuário, sem pedir administrador.
+3. Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo** (o app não é assinado).
+4. Em **Configurações → Chaves de API**, cole sua chave do Gemini e/ou da OpenAI.
+
+Requisitos: Windows 10 (versão 2004 ou mais nova) ou Windows 11, 64 bits.
+
+Guia completo (inclui HEIC e a leitura de texto local no Windows): [docs/INSTALACAO.md](docs/INSTALACAO.md)
 
 ## Atualizar
 
-Dentro do app: **Configurações → Atualizações → Buscar atualização → Instalar e reiniciar**.
-O app baixa a versão nova daqui do GitHub, confere a integridade e se substitui.
+Dentro do app, nas duas versões: **Configurações → Atualizações → Buscar atualização → Instalar e reiniciar**.
+O app baixa a versão nova daqui do GitHub, confere a integridade (SHA-256) e se substitui. No Windows, o instalador
+roda em silêncio, fecha o app, atualiza e abre de novo; os lotes, clientes e chaves continuam.
 
 ## Privacidade
 
-- **Chaves de API**: arquivo `chaves.json` do app, legível só pela sua conta do Mac. Nunca saem dele (exceto para o próprio Google/OpenAI).
-- **Perfis de clientes, lotes e imagens**: `~/Library/Application Support/IMP Criativos/` e as pastas que você escolher.
+- **Chaves de API**: arquivo `chaves.json` do app, legível só pela sua conta (no Mac, permissão só do usuário; no Windows, cifrado pelo DPAPI em `%LOCALAPPDATA%\IMP Criativos\chaves.json`). Nunca saem do computador (exceto para o próprio Google/OpenAI).
+- **Perfis de clientes, lotes e imagens**: no Mac, `~/Library/Application Support/IMP Criativos/`; no Windows, `%LOCALAPPDATA%\IMP Criativos\`; e as pastas que você escolher. Desinstalar no Windows não apaga essa pasta.
 - **Este repositório** contém só código e prompts genéricos. Nenhum dado de cliente.
 
 ## Para desenvolvedores
@@ -95,7 +110,18 @@ xcodegen generate
 open IMPCriativos.xcodeproj
 ```
 
-Publicar versão: escreva a seção no `CHANGELOG.md`, troque o número no arquivo `VERSION` (ex.: `1.0.0-beta.2`) e envie para a `main`. O GitHub Actions compila, cria a tag e publica a Release.
+Windows (.NET 10 SDK, PowerShell 7 e CMake; ou abra a solução no Visual Studio):
+
+```powershell
+pwsh scripts/build_libjpeg_turbo_windows.ps1   # turbojpeg.dll (mesma versão do Mac), só na primeira vez
+dotnet test windows/tests/IMPCriativos.Tests    # também roda no Linux
+pwsh windows/build/publish.ps1                  # app self-contained + instalador (Inno Setup 6)
+pwsh windows/build/smoke.ps1                    # teste de fumaça: abre cada tela e salva capturas
+```
+
+Toda mudança de função, prompt, texto ou tela vale para as duas versões no mesmo PR ([CLAUDE.md](CLAUDE.md), [docs/WINDOWS-PLANO.md](docs/WINDOWS-PLANO.md)).
+
+Publicar versão: escreva a seção no `CHANGELOG.md`, troque o número no arquivo `VERSION` (ex.: `1.0.0-beta.2`) e envie para a `main`. O GitHub Actions compila as duas versões, cria a tag e publica a Release (Mac: `.dmg`, `.zip`, `.zip.sha256`; Windows: `.exe`, `.exe.sha256`).
 
 ### Créditos
 

@@ -154,5 +154,24 @@ def main() -> None:
     print("ícones gerados em", ASSETS)
 
 
+def make_windows_icon() -> Path:
+    """1.0.0-beta.27: ícone da versão Windows (Resources/AppIcon.ico, 16 a 256 px) a partir de Resources/AppIcon-1024.png.
+    Também copia o símbolo vermelho (BrandMark) para o app WPF."""
+    src = Image.open(ROOT / "Resources" / "AppIcon-1024.png").convert("RGBA")
+    out = ROOT / "Resources" / "AppIcon.ico"
+    sizes = [16, 24, 32, 48, 64, 128, 256]
+    src.resize((256, 256), Image.LANCZOS).save(out, format="ICO", sizes=[(s, s) for s in sizes])
+    app = ROOT / "windows" / "src" / "IMPCriativos.App" / "Resources"
+    app.mkdir(parents=True, exist_ok=True)
+    (app / "AppIcon.ico").write_bytes(out.read_bytes())
+    mark = ASSETS / "BrandMark.imageset" / "BrandMark@2x.png"
+    if mark.exists():
+        (app / "BrandMark.png").write_bytes(mark.read_bytes())
+    return out
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--windows-ico":
+        print(f"ícone do Windows: {make_windows_icon()}")
+    else:
+        main()
