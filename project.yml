@@ -38,6 +38,7 @@ targets:
         LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor/libjpeg-turbo/lib
     scheme: {}
   # 1.0.0-beta.19: testes automáticos da lógica de velocidade e do paralelismo (sem abrir o app, sem chamar IA).
+  # 1.0.0-beta.21: + sorteio e motor de imagem do Otimizador em Lote.
   # Compila só os arquivos puros (Foundation) junto com os testes.
   IMPCriativosLogicTests:
     type: bundle.unit-test
@@ -47,8 +48,13 @@ targets:
       - path: Sources/IMPCriativos/Pipeline/SpeedPolicy.swift
       - path: Sources/IMPCriativos/Pipeline/BoundedParallel.swift
       - path: Sources/IMPCriativos/Pipeline/StoryOptimizerParams.swift
+      # 1.0.0-beta.21: motor do Otimizador em Lote, testado de verdade com imagens fabricadas
+      - path: Sources/IMPCriativos/Pipeline/StoryOptimizer.swift
+      - path: Sources/IMPCriativos/Pipeline/ImageTools.swift
     settings:
       base:
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/CTurboJPEG
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor/libjpeg-turbo/lib
         PRODUCT_BUNDLE_IDENTIFIER: com.imperaservices.impcriativos.logictests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Manual
