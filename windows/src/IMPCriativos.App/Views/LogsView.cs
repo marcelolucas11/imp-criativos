@@ -95,14 +95,21 @@ public sealed class LogsView : Page
         var search = U.Field(_search, v => { _search = v; FillBody(); }, "Buscar (ex.: 503, nome do criativo, chave)");
         search.Width = 300;
         var jobs = JobOptions();
-        var filters = U.H(10,
+        var filters = new WrapPanel();
+        foreach (var f in new UIElement[]
+        {
             search,
             U.Segmented(Levels, _level, x => x, v => { _level = v; Rerender(); }),
             U.Combo(new LogCategory?[] { null }.Concat(LogCategoryExt.All.Select(c => (LogCategory?)c)), _category,
                 c => c == null ? "Todas as categorias" : c.Value.Label(), v => { _category = v; FillBody(); }, 170),
             U.Combo(new Guid?[] { null }.Concat(jobs.Select(j => (Guid?)j.Id)), _jobFilter,
                 id => id == null ? "Todos os lotes" : jobs.First(j => j.Id == id).Name, v => { _jobFilter = v; FillBody(); }, 180),
-            U.Combo(Periods, _period, x => x, v => { _period = v; FillBody(); }, 150));
+            U.Combo(Periods, _period, x => x, v => { _period = v; FillBody(); }, 150),
+        })
+        {
+            if (f is FrameworkElement fe) fe.Margin = new Thickness(0, 0, 10, 8);
+            filters.Children.Add(f);
+        }
         U.Add(head, filters, 12);
         U.Add(head, _summary, 12);
         var header = new Border { Background = Brand.HeaderBackground, Padding = new Thickness(20), Child = head, BorderBrush = Brand.Stroke, BorderThickness = new Thickness(0, 0, 0, 1) };

@@ -148,8 +148,8 @@ public static class SmokeTest
 
         // dados de exemplo: um cliente e um lote com a limpeza pronta
         var model = AppModel.Shared;
-        var client = ClientProfile.Example;
-        model.Clients.Save(client);
+        var client = model.Clients.Clients.FirstOrDefault() ?? ClientProfile.Example;
+        if (model.Clients.Clients.Count == 0) model.Clients.Save(client);
         var job = model.Jobs.CreateJob("Lote de exemplo", client, inputs, images, 2, ProviderKind.Gemini, ProviderKind.Gemini, ProviderKind.Gemini,
             OutputSizeMode.Original, OutputFormat.Png, verifyText: true);
         model.Jobs.Update(job.Id, j =>

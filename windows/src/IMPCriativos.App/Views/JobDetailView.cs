@@ -120,13 +120,13 @@ public sealed class JobDetailView : Page
         if (job.FailureCount > 0)
             left.Add(U.Btn($"↻ Tentar falhas de novo ({job.FailureCount})", () => Model.Runner.RetryFailed(_jobID),
                 tooltip: "Volta para a fila tudo que falhou, usando a mesma IA (com troca automática se estiver ligada)."));
-        left.Add(U.Segmented(Filters, _filter, f => f, f => { _filter = f; Rerender(); }));
 
         var actions = new Button { Content = "⋯ Ações", Padding = new Thickness(12, 6, 12, 6) };
         actions.Click += (_, _) => ActionsMenu(job, actions);
         var export = U.Btn(_exporting ? "Exportando…" : $"⬇ Baixar aprovados ({job.ApprovedCount})", () => Export(job), primary: true,
             enabled: job.ApprovedCount > 0 && !_exporting);
         U.Add(s, U.Row(left, new UIElement[] { actions, export }), 12);
+        U.Add(s, U.Segmented(Filters, _filter, f => f, f => { _filter = f; Rerender(); }), 10);
         return new Border { Background = Brand.HeaderBackground, Padding = new Thickness(20), Child = s, BorderBrush = Brand.Stroke, BorderThickness = new Thickness(0, 0, 0, 1) };
     }
 

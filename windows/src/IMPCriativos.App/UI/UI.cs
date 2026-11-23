@@ -255,18 +255,21 @@ public static class U
         return g;
     }
 
-    public static StackPanel Warning(string text) => IconText("⚠", text, Brand.Warning);
-    public static StackPanel Error(string text) => IconText("⛔", text, Brand.Red);
+    public static DockPanel Warning(string text) => IconText("⚠", text, Brand.Warning);
+    public static DockPanel Error(string text) => IconText("⛔", text, Brand.Red);
 
-    public static StackPanel IconText(string icon, string text, Brush color, double size = 12)
+    /// <summary>Ícone + texto que quebra linha na largura disponível (como o Label do SwiftUI).</summary>
+    public static DockPanel IconText(string icon, string text, Brush color, double size = 12)
     {
         var tb = T(text, size, color: color);
         tb.MaxWidth = 900;
-        var s = new StackPanel { Orientation = Orientation.Horizontal };
-        s.Children.Add(new TextBlock { Text = icon, Foreground = color, FontSize = size, Margin = new Thickness(0, 0, 6, 0) });
-        s.Children.Add(tb);
-        s.ToolTip = text;
-        return s;
+        var d = new DockPanel { LastChildFill = true };
+        var i = new TextBlock { Text = icon, Foreground = color, FontSize = size, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
+        DockPanel.SetDock(i, Dock.Left);
+        d.Children.Add(i);
+        d.Children.Add(tb);
+        d.ToolTip = text;
+        return d;
     }
 
     public static ScrollViewer Scroll(UIElement content, double padding = 28) => new()
