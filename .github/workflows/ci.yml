@@ -47,6 +47,8 @@ jobs:
       - name: Paridade Mac → Windows (prompts e sorteios)
         run: |
           scripts/paridade/gerar.sh /tmp/paridade-mac.json
+          # cópia no log (gzip + base64), para quem não consegue baixar artefatos
+          echo "PARIDADE-B64:$(gzip -9c /tmp/paridade-mac.json | base64 | tr -d '\n')"
           FIX=windows/tests/IMPCriativos.Tests/fixtures/paridade-mac.json
           if [ -f "$FIX" ]; then
             diff -u "$FIX" /tmp/paridade-mac.json || { echo "::error::Prompts ou sorteios do Mac mudaram: rode scripts/paridade/gerar.sh e atualize a versão Windows no mesmo PR."; exit 1; }
@@ -187,7 +189,7 @@ jobs:
         run: scripts/build_libjpeg_turbo_windows.ps1
 
       - name: Compilar a solução
-        run: dotnet build windows/IMPCriativos.Windows.sln -c Release
+        run: dotnet build windows/IMPCriativos.Windows.sln -c Release "-p:WarningLevel=0" -clp:ErrorsOnly
 
       - name: Testes
         env:
@@ -210,3 +212,12 @@ jobs:
           path: windows/artifacts/smoke
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Instalador (para teste manual)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: windows/artifacts/dist
+          if-no-files-found: ignore
+          retention-days: 7

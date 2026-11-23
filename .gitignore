@@ -26,3 +26,6 @@ windows/vendor/
 windows/**/bin/
 windows/**/obj/
 windows/artifacts/
+
+# scripts de build da versão Windows (o build/ acima é a saída do Xcode)
+!windows/build/
